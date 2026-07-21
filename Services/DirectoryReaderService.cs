@@ -14,6 +14,89 @@ namespace FastExplorer.Services
     /// </summary>
     public sealed class DirectoryReaderService
     {
+        /// <summary>Известные системные папки, которые пропускаем при подсчёте размера.</summary>
+        private static readonly HashSet<string> SkippedSystemDirs = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "windows", "windows.old",
+            "program files", "program files (x86)",
+            "programdata",
+            "$recycle.bin",
+            "system volume information",
+            "recovery",
+            "winsxs",
+            "installer",
+            "assembly",
+            "nativeimages",
+            "servicepackfiles",
+            "config.msi",
+            "msocache",
+            "$winreagent",
+            "windowsapps",
+            "$getcurrent",
+            "$windows.~bt",
+            "$windows.~ws"
+        };
+
+        /// <summary>
+        /// Рекурсивно вычисляет размер папки (сумму всех файлов внутри).
+        /// Пропускает системные папки и недоступные директории.
+        /// </summary>
+        public static async Task<long> CalculateFolderSizeAsync(string path, CancellationToken token)
+        {
+            return await Task.Run(() =>
+            {
+                long totalSize = 0;
+                var stack = new Stack<string>();
+                stack.Push(path);
+
+                while (stack.Count > 0)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    var dir = stack.Pop();
+                    var dirName = Path.GetFileName(dir);
+
+                    if (!string.IsNullOrEmpty(dirName) && SkippedSystemDirs.Contains(dirName))
+                        continue;
+
+                    string[] files;
+                    string[] subDirs;
+
+                    try
+                    {
+                        files = Directory.GetFiles(dir);
+                    }
+                    catch (UnauthorizedAccessException) { continue; }
+                    catch (DirectoryNotFoundException) { continue; }
+                    catch (IOException) { continue; }
+
+                    try
+                    {
+                        subDirs = Directory.GetDirectories(dir);
+                    }
+                    catch (UnauthorizedAccessException) { continue; }
+                    catch (DirectoryNotFoundException) { continue; }
+                    catch (IOException) { continue; }
+
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            totalSize += new FileInfo(file).Length;
+                        }
+                        catch { }
+                    }
+
+                    foreach (var subDir in subDirs)
+                    {
+                        stack.Push(subDir);
+                    }
+                }
+
+                return totalSize;
+            }, token);
+        }
+
         public async Task<DirectoryReadResult> ReadDirectoryAsync(string path, CancellationToken token)
         {
             var directories = new List<FileSystemEntry>();

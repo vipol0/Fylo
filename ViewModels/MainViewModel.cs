@@ -22,11 +22,13 @@ namespace FastExplorer.ViewModels
         private readonly DirectoryReaderService _reader = new();
         private readonly FileSystemOperationService _operationService = new();
         private readonly DriveEnumeratorService _driveEnumerator = new();
+        private readonly FavoritesService _favoritesService = new();
         private readonly List<string> _backStack = new();
         private readonly List<string> _forwardStack = new();
 
         private CancellationTokenSource? _loadCts;
         private CancellationTokenSource? _recursiveSearchCts;
+        private CancellationTokenSource? _sizingCts;
         private SearchScope _searchScope = SearchScope.CurrentFolder;
 
         private string _currentPath = string.Empty;
@@ -34,12 +36,30 @@ namespace FastExplorer.ViewModels
         private string _statusText = "Готово";
         private bool _isLoading;
         private FileSystemEntry? _selectedEntry;
+        private SidebarTreeItem? _selectedSidebarItem;
         private string _sortColumn = "Name";
         private ListSortDirection _sortDirection = ListSortDirection.Ascending;
         private string _searchText = string.Empty;
         private string? _editingEntryFullPath;
         private string? _pendingRenameText;
         private bool _isSearchEmpty;
+        private bool _isDrivePanelVisible = true;
+
+        public bool IsDrivePanelVisible
+        {
+            get => _isDrivePanelVisible;
+            set
+            {
+                if (SetField(ref _isDrivePanelVisible, value))
+                {
+                    OnPropertyChanged(nameof(DrivePanelToggleTooltip));
+                }
+            }
+        }
+
+        public string DrivePanelToggleTooltip => _isDrivePanelVisible
+            ? "Скрыть панель дисков"
+            : "Показать панель дисков";
 
         public string? EditingEntryFullPath
         {
@@ -54,7 +74,7 @@ namespace FastExplorer.ViewModels
         }
 
         public ObservableCollection<FileSystemEntry> Entries { get; } = new();
-        public ObservableCollection<DriveEntry> Drives { get; } = new();
+        public ObservableCollection<SidebarTreeItem> SidebarItems { get; } = new();
 
         public ICollectionView EntriesView { get; }
 
@@ -155,7 +175,19 @@ namespace FastExplorer.ViewModels
         public FileSystemEntry? SelectedEntry
         {
             get => _selectedEntry;
-            set => SetField(ref _selectedEntry, value);
+            set
+            {
+                if (SetField(ref _selectedEntry, value))
+                {
+                    OnPropertyChanged(nameof(CanAddToFavorites));
+                }
+            }
+        }
+
+        public SidebarTreeItem? SelectedSidebarItem
+        {
+            get => _selectedSidebarItem;
+            set => SetField(ref _selectedSidebarItem, value);
         }
 
         public RelayCommand NavigateBackCommand { get; }
@@ -165,7 +197,6 @@ namespace FastExplorer.ViewModels
         public RelayCommand GoToAddressCommand { get; }
         public RelayCommand OpenEntryCommand { get; }
         public RelayCommand SortByColumnCommand { get; }
-        public RelayCommand NavigateToDriveCommand { get; }
         public RelayCommand ClearSearchCommand { get; }
         public RelayCommand ToggleSearchScopeCommand { get; }
         public RelayCommand CreateFolderCommand { get; }
@@ -174,6 +205,13 @@ namespace FastExplorer.ViewModels
         public RelayCommand RenameEntryCommand { get; }
         public RelayCommand CommitRenameCommand { get; }
         public RelayCommand CancelRenameCommand { get; }
+        public RelayCommand ToggleDrivePanelCommand { get; }
+        public RelayCommand AddToFavoritesCommand { get; }
+        public RelayCommand RemoveFromFavoritesCommand { get; }
+
+        public bool CanAddToFavorites =>
+            SelectedEntry is { IsDirectory: true } &&
+            !_favoritesService.Contains(SelectedEntry.FullPath);
 
         public MainViewModel()
         {
@@ -189,7 +227,6 @@ namespace FastExplorer.ViewModels
             GoToAddressCommand = new RelayCommand(_ => _ = NavigateToAddressBarAsync());
             OpenEntryCommand = new RelayCommand(param => OpenEntry(param as FileSystemEntry));
             SortByColumnCommand = new RelayCommand(param => SortByColumn(param as string));
-            NavigateToDriveCommand = new RelayCommand(param => NavigateToDrive(param as DriveEntry));
             ClearSearchCommand = new RelayCommand(_ => ClearSearch());
             ToggleSearchScopeCommand = new RelayCommand(_ => ToggleSearchScope());
 
@@ -199,24 +236,160 @@ namespace FastExplorer.ViewModels
             RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null);
             CommitRenameCommand = new RelayCommand(_ => CommitRename());
             CancelRenameCommand = new RelayCommand(_ => CancelRename());
+            ToggleDrivePanelCommand = new RelayCommand(_ => IsDrivePanelVisible = !IsDrivePanelVisible);
+            AddToFavoritesCommand = new RelayCommand(_ => AddCurrentToFavorites(), _ => CanAddToFavorites);
+            RemoveFromFavoritesCommand = new RelayCommand(param => RemoveFromFavorites(param as SidebarTreeItem));
 
-            LoadDrives();
+            LoadSidebarItems();
 
-            var startPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var startPath = @"C:\";
             _ = LoadDirectoryAsync(startPath, pushHistory: false);
+
+            var drivesSection = SidebarItems.FirstOrDefault();
+            if (drivesSection != null)
+            {
+                var cDrive = drivesSection.Children.FirstOrDefault(c =>
+                    string.Equals(c.Path, startPath, StringComparison.OrdinalIgnoreCase));
+                if (cDrive != null)
+                    cDrive.IsSelected = true;
+            }
         }
 
-        private void LoadDrives()
+        private void LoadSidebarItems()
         {
-            Drives.Clear();
-            foreach (var drive in _driveEnumerator.GetDrives())
-                Drives.Add(drive);
+            SidebarItems.Clear();
+
+            var drives = _driveEnumerator.GetDrives();
+
+            var drivesSection = new SidebarTreeItem
+            {
+                DisplayName = "Диски",
+                Icon = "💾",
+                ItemType = SidebarItemType.Section,
+                IsSelectable = false,
+                IsExpanded = true
+            };
+            foreach (var drive in drives)
+            {
+                drivesSection.Children.Add(new SidebarTreeItem
+                {
+                    DisplayName = drive.DisplayName,
+                    Icon = "💾",
+                    ItemType = SidebarItemType.Drive,
+                    Path = drive.RootPath,
+                    IsSelectable = true,
+                    DriveLetter = drive.DriveLetter,
+                    TotalSizeBytes = drive.TotalSizeBytes,
+                    FreeSizeBytes = drive.FreeSizeBytes,
+                    IsReady = drive.IsReady
+                });
+            }
+            SidebarItems.Add(drivesSection);
+
+            var favoritesSection = new SidebarTreeItem
+            {
+                DisplayName = "Избранное",
+                Icon = "📁",
+                ItemType = SidebarItemType.Section,
+                IsSelectable = false,
+                IsExpanded = true
+            };
+            foreach (var path in _favoritesService.GetAll())
+            {
+                var displayName = GetDisplayNameForPath(path);
+                AddFolderChild(favoritesSection, displayName, path, isFavorite: true);
+            }
+            SidebarItems.Add(favoritesSection);
+
+            var thisPc = new SidebarTreeItem
+            {
+                DisplayName = "Этот компьютер",
+                Icon = "🖥️",
+                ItemType = SidebarItemType.ThisPc,
+                IsSelectable = false,
+                IsExpanded = false
+            };
+            AddFolderChild(thisPc, "Загрузки", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
+            AddFolderChild(thisPc, "Рабочий стол", Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+            AddFolderChild(thisPc, "Видео", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
+            AddFolderChild(thisPc, "Документы", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+            AddFolderChild(thisPc, "Музыка", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
+            AddFolderChild(thisPc, "Изображения", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
+            SidebarItems.Add(thisPc);
         }
 
-        private void NavigateToDrive(DriveEntry? drive)
+        private static void AddFolderChild(SidebarTreeItem parent, string displayName, string path, bool isFavorite = false)
         {
-            if (drive == null || !drive.IsReady) return;
-            _ = LoadDirectoryAsync(drive.RootPath, pushHistory: true);
+            parent.Children.Add(new SidebarTreeItem
+            {
+                DisplayName = displayName,
+                Icon = "📁",
+                ItemType = SidebarItemType.Folder,
+                Path = path,
+                IsSelectable = true,
+                IsFavorite = isFavorite
+            });
+        }
+
+        private static string GetDisplayNameForPath(string path)
+        {
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            var downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+            if (string.Equals(path, desktop, StringComparison.OrdinalIgnoreCase))
+                return "Рабочий стол";
+            if (string.Equals(path, downloads, StringComparison.OrdinalIgnoreCase))
+                return "Загрузки";
+            if (string.Equals(path, documents, StringComparison.OrdinalIgnoreCase))
+                return "Документы";
+
+            return Path.GetFileName(path.TrimEnd('\\', '/'));
+        }
+
+        private void AddCurrentToFavorites()
+        {
+            var entry = SelectedEntry;
+            if (entry == null || !entry.IsDirectory) return;
+            _favoritesService.Add(entry.FullPath);
+            RebuildFavoritesSection();
+            OnPropertyChanged(nameof(CanAddToFavorites));
+        }
+
+        private void RemoveFromFavorites(SidebarTreeItem? item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Path)) return;
+            _favoritesService.Remove(item.Path);
+            RebuildFavoritesSection();
+            OnPropertyChanged(nameof(CanAddToFavorites));
+        }
+
+        private void RebuildFavoritesSection()
+        {
+            var section = SidebarItems.FirstOrDefault(s =>
+                s.ItemType == SidebarItemType.Section && s.DisplayName == "Избранное");
+            if (section == null) return;
+            section.Children.Clear();
+            foreach (var path in _favoritesService.GetAll())
+            {
+                var displayName = GetDisplayNameForPath(path);
+                section.Children.Add(new SidebarTreeItem
+                {
+                    DisplayName = displayName,
+                    Icon = "📁",
+                    ItemType = SidebarItemType.Folder,
+                    Path = path,
+                    IsSelectable = true,
+                    IsFavorite = true
+                });
+            }
+        }
+
+        public void NavigateToSidebarItem(SidebarTreeItem? item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Path)) return;
+            if (item.ItemType == SidebarItemType.Drive && !item.IsReady) return;
+            _ = LoadDirectoryAsync(item.Path, pushHistory: true);
         }
 
         public async Task LoadDirectoryAsync(string path, bool pushHistory)
@@ -228,6 +401,7 @@ namespace FastExplorer.ViewModels
             }
 
             _recursiveSearchCts?.Cancel();
+            _sizingCts?.Cancel();
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
             var token = _loadCts.Token;
@@ -259,6 +433,8 @@ namespace FastExplorer.ViewModels
                 Entries.Clear();
                 foreach (var dir in result.Directories) Entries.Add(dir);
                 foreach (var file in result.Files) Entries.Add(file);
+
+                _ = StartFolderSizingAsync();
 
                 CurrentPath = path;
                 AddressBarText = path;
@@ -702,6 +878,49 @@ namespace FastExplorer.ViewModels
                 StatusText = $"Найдено: {count} из {Entries.Count}";
                 IsSearchEmpty = count == 0;
             }
+        }
+
+        private async Task StartFolderSizingAsync()
+        {
+            _sizingCts?.Cancel();
+            _sizingCts = new CancellationTokenSource();
+            var token = _sizingCts.Token;
+
+            var dirs = Entries.Where(e => e.IsDirectory).ToList();
+            if (dirs.Count == 0) return;
+
+            var semaphore = new SemaphoreSlim(3);
+
+            var tasks = dirs.Select(async entry =>
+            {
+                await semaphore.WaitAsync(token);
+                try
+                {
+                    var size = await DirectoryReaderService.CalculateFolderSizeAsync(entry.FullPath, token);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        entry.SizeBytes = size;
+                    }, System.Windows.Threading.DispatcherPriority.Background);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        if (entry.SizeBytes < 0) entry.SizeBytes = 0;
+                    }, System.Windows.Threading.DispatcherPriority.Background);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException) { }
         }
 
         private void SortByColumn(string? columnName)

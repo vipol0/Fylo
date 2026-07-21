@@ -1,5 +1,7 @@
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace FastExplorer.Models
 {
@@ -8,12 +10,27 @@ namespace FastExplorer.Models
     /// Не хранит лишних данных, чтобы список из десятков тысяч файлов
     /// оставался быстрым (важно для скорости и легковесности).
     /// </summary>
-    public sealed class FileSystemEntry
+    public sealed class FileSystemEntry : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         public string Name { get; init; } = string.Empty;
         public string FullPath { get; init; } = string.Empty;
         public bool IsDirectory { get; init; }
-        public long SizeBytes { get; init; }
+
+        private long _sizeBytes;
+        public long SizeBytes
+        {
+            get => _sizeBytes;
+            set
+            {
+                if (_sizeBytes == value) return;
+                _sizeBytes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SizeDisplay));
+            }
+        }
+
         public DateTime Modified { get; init; }
         public string Extension { get; init; } = string.Empty;
         public string RelativePath { get; init; } = string.Empty;
@@ -23,7 +40,7 @@ namespace FastExplorer.Models
         public bool HasRelativePath => !string.IsNullOrEmpty(RelativePath);
 
         /// <summary>Человекочитаемый размер (пусто для папок).</summary>
-        public string SizeDisplay => IsDirectory ? string.Empty : FormatSize(SizeBytes);
+        public string SizeDisplay => SizeBytes < 0 ? "..." : FormatSize(SizeBytes);
 
         /// <summary>Тип для колонки "Тип".</summary>
         public string TypeDisplay => IsDirectory
@@ -37,7 +54,7 @@ namespace FastExplorer.Models
                 Name = dir.Name,
                 FullPath = dir.FullName,
                 IsDirectory = true,
-                SizeBytes = 0,
+                SizeBytes = -1,
                 Modified = SafeGetLastWrite(dir),
                 Extension = string.Empty
             };
@@ -68,8 +85,14 @@ namespace FastExplorer.Models
             catch { return 0; }
         }
 
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
         private static string FormatSize(long bytes)
         {
+            if (bytes < 0) return "...";
             string[] units = { "Б", "КБ", "МБ", "ГБ", "ТБ" };
             double size = bytes;
             int unitIndex = 0;

@@ -112,6 +112,20 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button x:Name="TogglePanelButton" ToolTip="{Binding DrivePanelToggleTooltip}" Width="36" Height="30"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                Command="{Binding ToggleDrivePanelCommand}">
+                            <Grid x:Name="ToggleIconGrid" Width="20" Height="20" UseLayoutRounding="True">
+                                <Grid x:Name="HidePanelIcon" Width="20" Height="20">
+                                    <Path Fill="#80FFFFFF" Stroke="White" StrokeThickness="1.5" StrokeLineJoin="Round"
+                                          Data="M 4,1 A 3,3 0 0,0 1,4 L 1,16 A 3,3 0 0,0 4,19 L 10,19 L 10,1 Z"/>
+                                    <Path Stroke="White" StrokeThickness="1.5" StrokeLineJoin="Round"
+                                          Data="M 4,1 L 16,1 A 3,3 0 0,1 19,4 L 19,16 A 3,3 0 0,1 16,19 L 4,19 A 3,3 0 0,1 1,16 L 1,4 A 3,3 0 0,1 4,1 Z M 10,1 L 10,19"/>
+                                </Grid>
+                                <Path x:Name="ShowPanelIcon" Stroke="White" StrokeThickness="1.5" StrokeLineJoin="Round"
+                                      Data="M 4,1 L 16,1 A 3,3 0 0,1 19,4 L 19,16 A 3,3 0 0,1 16,19 L 4,19 A 3,3 0 0,1 1,16 L 1,4 A 3,3 0 0,1 4,1 Z M 10,1 L 10,19"/>
+                            </Grid>
+                        </Button>
                         <Button Content="&#x2190;" ToolTip="Назад" Width="32" Height="30"
                                 Style="{StaticResource ToolbarButtonStyle}"
                                 Command="{Binding NavigateBackCommand}"/>
@@ -183,66 +197,38 @@
         <!-- ================= ОСНОВНАЯ ОБЛАСТЬ: БОКОВАЯ ПАНЕЛЬ + СПИСОК ================= -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200" MinWidth="140" MaxWidth="360"/>
+                <ColumnDefinition x:Name="LeftPanelColumn" Width="200" MinWidth="200"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ===== Боковая панель: диски ===== -->
-            <Border Grid.Column="0" Background="{StaticResource PanelBackgroundBrush}"
+            <!-- ===== Боковая панель: дерево ===== -->
+            <Border x:Name="LeftPanelBorder" Grid.Column="0" Width="200" MinWidth="0"
+                    Background="{StaticResource PanelBackgroundBrush}"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="ЭТОТ КОМПЬЮТЕР"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               FontSize="11" FontWeight="SemiBold"
-                               Margin="14,12,10,6"/>
+                <Border.Resources>
+                    <conv:SidebarTreeTemplateSelector x:Key="SidebarTemplateSelector"
+                        SectionTemplate="{StaticResource SidebarSectionTemplate}"
+                        ThisPcTemplate="{StaticResource SidebarThisPcTemplate}"
+                        DriveTemplate="{StaticResource SidebarDriveTemplate}"
+                        FolderTemplate="{StaticResource SidebarFolderTemplate}"/>
+                </Border.Resources>
 
-                    <ListView DockPanel.Dock="Top"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              ItemsSource="{Binding Drives}"
-                              ItemContainerStyle="{StaticResource DriveListItemStyle}"
-                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Cursor="Hand"
-                                            MouseLeftButtonUp="DriveItem_MouseLeftButtonUp">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#x1F4BE;" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <StackPanel>
-                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontSize="13">
-                                                <Run Text="{Binding DisplayName, Mode=OneWay}"/>
-                                                <Run Text=" (" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                <Run Text="{Binding DriveLetter, Mode=OneWay}" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                <Run Text=")" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding CapacityDisplay}"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                    </StackPanel>
-
-                                    <!-- Мини-полоса заполненности диска -->
-                                    <Grid Height="4" Margin="22,6,4,0">
-                                        <Border Background="{StaticResource BorderBrush}" CornerRadius="2"/>
-                                        <Border Background="{StaticResource AccentBrush}" CornerRadius="2"
-                                                HorizontalAlignment="Stretch"
-                                                RenderTransformOrigin="0,0.5">
-                                            <Border.RenderTransform>
-                                                <ScaleTransform ScaleY="1" ScaleX="{Binding UsedFraction}"/>
-                                            </Border.RenderTransform>
-                                        </Border>
-                                    </Grid>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </DockPanel>
+                <TreeView x:Name="SidebarTree"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          ItemsSource="{Binding SidebarItems}"
+                          ItemTemplateSelector="{StaticResource SidebarTemplateSelector}"
+                          ItemContainerStyle="{StaticResource SidebarTreeItemStyle}"
+                          SelectedItemChanged="SidebarTree_SelectedItemChanged"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"/>
             </Border>
 
             <!-- ===== Разделитель для изменения ширины панели ===== -->
-            <GridSplitter Grid.Column="1" Width="4"
+            <GridSplitter x:Name="PanelSplitter" Grid.Column="1" Width="4"
                           HorizontalAlignment="Stretch"
                           Background="Transparent"
                           Cursor="SizeWE"/>
@@ -259,9 +245,11 @@
                       VirtualizingPanel.VirtualizationMode="Recycling"
                       VirtualizingPanel.ScrollUnit="Pixel"
                       ScrollViewer.CanContentScroll="True"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       SelectionMode="Extended"
                       AlternationCount="2"
-                      ContextMenuOpening="FilesListView_ContextMenuOpening">
+                      ContextMenuOpening="FilesListView_ContextMenuOpening"
+                      PreviewMouseWheel="FilesListView_PreviewMouseWheel">
                 <ListView.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Создать папку" Command="{Binding CreateFolderCommand}"/>
@@ -269,6 +257,10 @@
                         <Separator/>
                         <MenuItem Header="Переименовать" Command="{Binding RenameEntryCommand}"/>
                         <MenuItem Header="Удалить" Command="{Binding DeleteEntryCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="Добавить в избранное"
+                                  Command="{Binding AddToFavoritesCommand}"
+                                  Visibility="{Binding CanAddToFavorites, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                     </ContextMenu>
                 </ListView.ContextMenu>
 

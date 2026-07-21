@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FastExplorer.Helpers;
 using FastExplorer.Models;
 using FastExplorer.ViewModels;
@@ -15,6 +16,8 @@ namespace FastExplorer
 
         private Point _dragPoint;
         private bool _dragReady;
+        private bool _isAnimating;
+        private bool _pendingToggle;
 
         public MainWindow()
         {
@@ -35,6 +38,7 @@ namespace FastExplorer
             InputBindings.Add(new KeyBinding(new RelayCommand(_ => ViewModel.DeleteEntryCommand.Execute(null)), Key.Delete, ModifierKeys.None));
 
             ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            SyncIconState();
         }
 
         private void GoBackAlt()
@@ -76,11 +80,11 @@ namespace FastExplorer
             }
         }
 
-        private void DriveItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void SidebarTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (sender is FrameworkElement { DataContext: Models.DriveEntry drive })
+            if (e.NewValue is SidebarTreeItem item)
             {
-                ViewModel.NavigateToDriveCommand.Execute(drive);
+                ViewModel.NavigateToSidebarItem(item);
             }
         }
 
@@ -157,11 +161,29 @@ namespace FastExplorer
             }
         }
 
+        private void FilesListView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers != ModifierKeys.Shift) return;
+
+            var scrollViewer = FindVisualChild<ScrollViewer>(FilesListView);
+            if (scrollViewer == null) return;
+
+            e.Handled = true;
+            if (e.Delta > 0)
+                scrollViewer.LineLeft();
+            else
+                scrollViewer.LineRight();
+        }
+
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(MainViewModel.EditingEntryFullPath) && ViewModel.EditingEntryFullPath != null)
             {
                 Dispatcher.BeginInvoke(new Action(FocusRenameTextBox));
+            }
+            else if (e.PropertyName == nameof(MainViewModel.IsDrivePanelVisible))
+            {
+                AnimateDrivePanel();
             }
         }
 
@@ -235,6 +257,113 @@ namespace FastExplorer
                 e.Handled = true;
             }
         }
+
+        private void SyncIconState()
+        {
+            HidePanelIcon.Opacity = ViewModel.IsDrivePanelVisible ? 1 : 0;
+            ShowPanelIcon.Opacity = ViewModel.IsDrivePanelVisible ? 0 : 1;
+        }
+
+        private void AnimateDrivePanel()
+        {
+            if (_isAnimating)
+            {
+                _pendingToggle = true;
+                return;
+            }
+
+            bool shouldBeVisible = ViewModel.IsDrivePanelVisible;
+            bool isVisible = LeftPanelBorder.Visibility == Visibility.Visible;
+            if (shouldBeVisible == isVisible)
+                return;
+
+            _isAnimating = true;
+            _pendingToggle = false;
+
+            double currentWidth = LeftPanelColumn.ActualWidth;
+            double currentOpacity = LeftPanelBorder.Opacity;
+
+            LeftPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, null);
+            LeftPanelBorder.BeginAnimation(UIElement.OpacityProperty, null);
+            HidePanelIcon.BeginAnimation(UIElement.OpacityProperty, null);
+            ShowPanelIcon.BeginAnimation(UIElement.OpacityProperty, null);
+
+            LeftPanelColumn.Width = new GridLength(Math.Max(0, currentWidth));
+            LeftPanelBorder.Opacity = currentOpacity;
+
+            if (shouldBeVisible)
+                AnimateDrivePanelShow();
+            else
+                AnimateDrivePanelHide();
+        }
+
+        private void AnimateDrivePanelHide()
+        {
+            LeftPanelColumn.MinWidth = 0;
+
+            var widthAnim = new GridLengthAnimation
+            {
+                From = LeftPanelColumn.Width.Value,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(220),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+            widthAnim.Completed += (_, _) =>
+            {
+                LeftPanelBorder.Visibility = Visibility.Collapsed;
+                _isAnimating = false;
+                if (_pendingToggle)
+                    AnimateDrivePanel();
+            };
+            LeftPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, widthAnim);
+
+            var opacityAnim = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+            LeftPanelBorder.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
+
+            HidePanelIcon.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150)));
+            ShowPanelIcon.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
+        }
+
+        private void AnimateDrivePanelShow()
+        {
+            LeftPanelBorder.Visibility = Visibility.Visible;
+
+            LeftPanelColumn.MinWidth = 0;
+            var widthAnim = new GridLengthAnimation
+            {
+                From = LeftPanelColumn.Width.Value,
+                To = 200,
+                Duration = TimeSpan.FromMilliseconds(220),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+            widthAnim.Completed += (_, _) =>
+            {
+                LeftPanelColumn.MinWidth = 200;
+                SidebarTree.InvalidateVisual();
+                _isAnimating = false;
+                if (_pendingToggle)
+                    AnimateDrivePanel();
+            };
+            LeftPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, widthAnim);
+
+            var opacityAnim = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+            LeftPanelBorder.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
+
+            HidePanelIcon.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
+            ShowPanelIcon.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150)));
+        }
+
+
 
         private void UpdateMaximizeRestoreIcons()
         {

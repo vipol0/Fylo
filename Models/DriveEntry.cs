@@ -18,7 +18,7 @@ namespace FastExplorer.Models
             : 0;
 
         public string CapacityDisplay => IsReady && TotalSizeBytes > 0
-            ? $"{FormatSize(TotalSizeBytes - FreeSizeBytes)} / {FormatSize(TotalSizeBytes)}"
+            ? $"{FormatSize(FreeSizeBytes)} свободно"
             : string.Empty;
 
         private static string FormatSize(long bytes)
