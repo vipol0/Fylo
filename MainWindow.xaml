@@ -3,11 +3,19 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:FastExplorer.Converters"
         Title="Fast Explorer"
-        Height="720" Width="1080"
+        Height="640" Width="960"
         MinHeight="400" MinWidth="600"
         Background="{StaticResource AppBackgroundBrush}"
         FontFamily="Segoe UI"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="4"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <conv:IsDirectoryToIconConverter x:Key="IsDirectoryToIconConverter"/>
@@ -15,13 +23,83 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>   <!-- Тулбар + адресная строка -->
+            <RowDefinition Height="32"/>      <!-- Кастомный заголовок -->
+            <RowDefinition Height="Auto"/>    <!-- Тулбар + адресная строка -->
             <RowDefinition Height="*"/>       <!-- Список файлов -->
-            <RowDefinition Height="Auto"/>   <!-- Статус-бар -->
+            <RowDefinition Height="Auto"/>    <!-- Статус-бар -->
         </Grid.RowDefinitions>
 
+        <!-- ================= КАСТОМНЫЙ ЗАГОЛОВОК (стиль Discord) ================= -->
+        <Border Grid.Row="0"
+                Background="{StaticResource PanelBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                MouseMove="TitleBar_MouseMove"
+                MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                MouseRightButtonUp="TitleBar_MouseRightButtonUp">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Иконка приложения + название -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="14,0,0,0">
+                    <TextBlock Text="&#x1F4C1;" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Fast Explorer"
+                               Style="{StaticResource WindowTitleTextStyle}"
+                               Margin="8,0,0,0"/>
+                </StackPanel>
+
+                <!-- Заглушка для перетаскивания -->
+                <Grid Grid.Column="1" Background="Transparent"/>
+
+                <!-- Кнопки управления окном -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="MinimizeButton"
+                            Style="{StaticResource WindowButtonBaseStyle}"
+                            ToolTip="Свернуть"
+                            Click="MinimizeButton_Click">
+                        <Viewbox Width="10" Height="10">
+                            <Rectangle Width="10" Height="1" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                        </Viewbox>
+                    </Button>
+                    <Button x:Name="MaximizeButton"
+                            Style="{StaticResource WindowButtonBaseStyle}"
+                            ToolTip="Развернуть"
+                            Click="MaximizeButton_Click">
+                        <Grid>
+                            <Rectangle x:Name="MaximizeIcon" Width="10" Height="10"
+                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                       StrokeThickness="1"/>
+                            <Rectangle x:Name="RestoreIcon" Width="7" Height="7"
+                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                       StrokeThickness="1"
+                                       Visibility="Collapsed">
+                                <Rectangle.RenderTransform>
+                                    <TranslateTransform X="-2" Y="-2"/>
+                                </Rectangle.RenderTransform>
+                            </Rectangle>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="CloseButton"
+                            Style="{StaticResource WindowCloseButtonStyle}"
+                            ToolTip="Закрыть"
+                            Click="CloseButton_Click">
+                        <Path Data="M 0,0 L 10,10 M 10,0 L 0,10"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- ================= ВЕРХНЯЯ ПАНЕЛЬ ================= -->
-        <Border Grid.Row="0" Background="{StaticResource PanelBackgroundBrush}"
+        <Border Grid.Row="1" Background="{StaticResource PanelBackgroundBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Vertical" Margin="8,6,8,6">
                 <StackPanel Orientation="Horizontal">
@@ -54,7 +132,7 @@
         </Border>
 
         <!-- ================= ОСНОВНАЯ ОБЛАСТЬ: БОКОВАЯ ПАНЕЛЬ + СПИСОК ================= -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200" MinWidth="140" MaxWidth="360"/>
                 <ColumnDefinition Width="Auto"/>
@@ -246,7 +324,7 @@
         </Grid>
 
         <!-- ================= СТАТУС-БАР ================= -->
-        <Border Grid.Row="2" Background="{StaticResource PanelBackgroundBrush}"
+        <Border Grid.Row="3" Background="{StaticResource PanelBackgroundBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
             <TextBlock Text="{Binding StatusText}"
                        Foreground="{StaticResource TextSecondaryBrush}"

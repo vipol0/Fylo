@@ -8,16 +8,19 @@ namespace FastExplorer
 {
     public partial class MainWindow : Window
     {
-        private MainViewModel ViewModel => (MainViewModel)DataContext;
+        private readonly MainViewModel ViewModel;
+
+        private Point _dragPoint;
+        private bool _dragReady;
 
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainViewModel();
+            ViewModel = new MainViewModel();
+            DataContext = ViewModel;
 
-            SourceInitialized += (_, _) => Helpers.DarkTitleBarHelper.Apply(this);
+            StateChanged += (_, _) => UpdateMaximizeRestoreIcons();
 
-            // Горячие клавиши
             InputBindings.Add(new KeyBinding(ViewModel.RefreshCommand, Key.F5, ModifierKeys.None));
             InputBindings.Add(new KeyBinding(new Helpers.RelayCommand(_ => GoBackAlt()), Key.Back, ModifierKeys.None));
             InputBindings.Add(new KeyBinding(new Helpers.RelayCommand(_ => GoUpAlt()), Key.Up, ModifierKeys.Alt));
@@ -68,6 +71,79 @@ namespace FastExplorer
             {
                 ViewModel.NavigateToDriveCommand.Execute(drive);
             }
+        }
+
+        // ========== Кастомный заголовок окна ==========
+
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            SystemCommands.MinimizeWindow(this);
+        }
+
+        private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (WindowState == WindowState.Maximized)
+                SystemCommands.RestoreWindow(this);
+            else
+                SystemCommands.MaximizeWindow(this);
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            SystemCommands.CloseWindow(this);
+        }
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                if (WindowState == WindowState.Maximized)
+                    SystemCommands.RestoreWindow(this);
+                else
+                    SystemCommands.MaximizeWindow(this);
+                return;
+            }
+
+            _dragPoint = e.GetPosition(this);
+            _dragReady = true;
+        }
+
+        private void TitleBar_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_dragReady || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            var pos = e.GetPosition(this);
+            if (Math.Abs(pos.X - _dragPoint.X) > 4 || Math.Abs(pos.Y - _dragPoint.Y) > 4)
+            {
+                _dragReady = false;
+                DragMove();
+            }
+        }
+
+        private void TitleBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _dragReady = false;
+        }
+
+        private void TitleBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var point = PointToScreen(e.GetPosition(this));
+            SystemCommands.ShowSystemMenu(this, point);
+        }
+
+        private void UpdateMaximizeRestoreIcons()
+        {
+            bool isMaximized = WindowState == WindowState.Maximized;
+
+            if (MaximizeIcon != null)
+                MaximizeIcon.Visibility = isMaximized ? Visibility.Collapsed : Visibility.Visible;
+
+            if (RestoreIcon != null)
+                RestoreIcon.Visibility = isMaximized ? Visibility.Visible : Visibility.Collapsed;
+
+            if (MaximizeButton != null)
+                MaximizeButton.ToolTip = isMaximized ? "Восстановить" : "Развернуть";
         }
     }
 }
