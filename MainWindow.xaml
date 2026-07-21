@@ -346,7 +346,8 @@
                                                  BorderBrush="{StaticResource BorderBrush}"
                                                  BorderThickness="1"
                                                  Padding="2,1"
-                                                 CaretBrush="{StaticResource TextPrimaryBrush}">
+                                                 CaretBrush="{StaticResource TextPrimaryBrush}"
+                                                 LostFocus="RenameTextBox_LostFocus">
                                             <TextBox.Visibility>
                                                 <MultiBinding Converter="{StaticResource IsEditingConverter}">
                                                     <Binding Path="FullPath"/>

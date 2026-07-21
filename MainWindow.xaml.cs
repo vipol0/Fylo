@@ -214,6 +214,12 @@ namespace FastExplorer
             return null;
         }
 
+        private void RenameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.EditingEntryFullPath != null)
+                ViewModel.CancelRenameCommand.Execute(null);
+        }
+
         private void FocusSearchBox()
         {
             SearchBox.Focus();
