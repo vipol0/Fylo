@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Data;
 using FastExplorer.Dialogs;
 using FastExplorer.Helpers;
@@ -14,6 +15,8 @@ using FastExplorer.Services;
 
 namespace FastExplorer.ViewModels
 {
+    public enum SearchScope { CurrentFolder, AllSubfolders }
+
     public sealed class MainViewModel : ViewModelBase
     {
         private readonly DirectoryReaderService _reader = new();
@@ -23,6 +26,8 @@ namespace FastExplorer.ViewModels
         private readonly List<string> _forwardStack = new();
 
         private CancellationTokenSource? _loadCts;
+        private CancellationTokenSource? _recursiveSearchCts;
+        private SearchScope _searchScope = SearchScope.CurrentFolder;
 
         private string _currentPath = string.Empty;
         private string _addressBarText = string.Empty;
@@ -84,9 +89,20 @@ namespace FastExplorer.ViewModels
             {
                 if (SetField(ref _searchText, value))
                 {
-                    EntriesView.Refresh();
+                    if (_searchScope == SearchScope.CurrentFolder)
+                    {
+                        EntriesView.Refresh();
+                        UpdateStatusAfterFilter();
+                    }
+                    else
+                    {
+                        var roots = DriveInfo.GetDrives()
+                            .Where(d => d.IsReady)
+                            .Select(d => d.RootDirectory.FullName)
+                            .ToList();
+                        _ = RunRecursiveSearchAsync(roots, value);
+                    }
                     OnPropertyChanged(nameof(IsSearchActive));
-                    UpdateStatusAfterFilter();
                 }
             }
         }
@@ -98,6 +114,43 @@ namespace FastExplorer.ViewModels
             get => _isSearchEmpty;
             private set => SetField(ref _isSearchEmpty, value);
         }
+
+        public SearchScope CurrentSearchScope
+        {
+            get => _searchScope;
+            set
+            {
+                if (SetField(ref _searchScope, value))
+                {
+                    OnPropertyChanged(nameof(SearchScopeIcon));
+                    OnPropertyChanged(nameof(SearchScopeTooltip));
+
+                    _recursiveSearchCts?.Cancel();
+
+                    if (value == SearchScope.AllSubfolders)
+                    {
+                        if (IsSearchActive)
+                        {
+                            var roots = DriveInfo.GetDrives()
+                                .Where(d => d.IsReady)
+                                .Select(d => d.RootDirectory.FullName)
+                                .ToList();
+                            _ = RunRecursiveSearchAsync(roots, _searchText);
+                        }
+                    }
+                    else if (IsSearchActive)
+                    {
+                        _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
+                    }
+                }
+            }
+        }
+
+        public string SearchScopeIcon => _searchScope == SearchScope.CurrentFolder ? "📁" : "🌐";
+
+        public string SearchScopeTooltip => _searchScope == SearchScope.CurrentFolder
+            ? "Поиск в текущей папке"
+            : "Поиск во всех подпапках";
 
         public FileSystemEntry? SelectedEntry
         {
@@ -114,6 +167,7 @@ namespace FastExplorer.ViewModels
         public RelayCommand SortByColumnCommand { get; }
         public RelayCommand NavigateToDriveCommand { get; }
         public RelayCommand ClearSearchCommand { get; }
+        public RelayCommand ToggleSearchScopeCommand { get; }
         public RelayCommand CreateFolderCommand { get; }
         public RelayCommand CreateFileCommand { get; }
         public RelayCommand DeleteEntryCommand { get; }
@@ -137,6 +191,7 @@ namespace FastExplorer.ViewModels
             SortByColumnCommand = new RelayCommand(param => SortByColumn(param as string));
             NavigateToDriveCommand = new RelayCommand(param => NavigateToDrive(param as DriveEntry));
             ClearSearchCommand = new RelayCommand(_ => ClearSearch());
+            ToggleSearchScopeCommand = new RelayCommand(_ => ToggleSearchScope());
 
             CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath));
             CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath));
@@ -172,9 +227,19 @@ namespace FastExplorer.ViewModels
                 return;
             }
 
+            _recursiveSearchCts?.Cancel();
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
             var token = _loadCts.Token;
+
+            if (_searchScope != SearchScope.CurrentFolder && 
+                !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _searchScope = SearchScope.CurrentFolder;
+                OnPropertyChanged(nameof(CurrentSearchScope));
+                OnPropertyChanged(nameof(SearchScopeIcon));
+                OnPropertyChanged(nameof(SearchScopeTooltip));
+            }
 
             IsLoading = true;
             StatusText = "Загрузка...";
@@ -390,6 +455,238 @@ namespace FastExplorer.ViewModels
         {
             EditingEntryFullPath = null;
             PendingRenameText = null;
+        }
+
+        private void ToggleSearchScope()
+        {
+            CurrentSearchScope = _searchScope == SearchScope.CurrentFolder
+                ? SearchScope.AllSubfolders
+                : SearchScope.CurrentFolder;
+        }
+
+        private static readonly HashSet<string> SkippedDirNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "windows", "windows.old",
+            "program files", "program files (x86)",
+            "programdata",
+            "$recycle.bin",
+            "system volume information",
+            "recovery",
+            "winsxs",
+            "installer",
+            "assembly",
+            "nativeimages",
+            "servicepackfiles",
+            "config.msi",
+            "msocache",
+            "$winreagent",
+            "windowsapps",
+            "$getcurrent",
+            "$windows.~bt",
+            "$windows.~ws"
+        };
+
+        private async Task RunRecursiveSearchAsync(IEnumerable<string> rootPaths, string searchText)
+        {
+            _recursiveSearchCts?.Cancel();
+            _recursiveSearchCts = new CancellationTokenSource();
+            var token = _recursiveSearchCts.Token;
+
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                await LoadDirectoryAsync(CurrentPath, pushHistory: false);
+                return;
+            }
+
+            var roots = rootPaths as IReadOnlyList<string> ?? rootPaths.ToList();
+            if (roots.Count == 0)
+            {
+                StatusText = "Нет доступных дисков";
+                return;
+            }
+
+            IsLoading = true;
+            StatusText = "Поиск...";
+            Entries.Clear();
+
+            int totalFound = 0;
+            var batch = new List<FileSystemEntry>();
+            var batchLock = new object();
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    Parallel.ForEach(roots, new ParallelOptions
+                    {
+                        CancellationToken = token,
+                        MaxDegreeOfParallelism = Math.Min(roots.Count, 4)
+                    }, root =>
+                    {
+                        var stack = new Stack<string>();
+                        stack.Push(root);
+
+                        while (stack.Count > 0)
+                        {
+                            if (token.IsCancellationRequested) return;
+
+                            var currentDir = stack.Pop();
+
+                            var leafName = Path.GetFileName(currentDir);
+                            if (!string.IsNullOrEmpty(leafName) && SkippedDirNames.Contains(leafName))
+                                continue;
+
+                            string[] subDirs;
+                            string[] files;
+
+                            try
+                            {
+                                subDirs = Directory.GetDirectories(currentDir);
+                            }
+                            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
+                            {
+                                subDirs = Array.Empty<string>();
+                            }
+
+                            try
+                            {
+                                files = Directory.GetFiles(currentDir);
+                            }
+                            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
+                            {
+                                files = Array.Empty<string>();
+                            }
+
+                            foreach (var subDir in subDirs)
+                            {
+                                if (token.IsCancellationRequested) return;
+                                stack.Push(subDir);
+
+                                try
+                                {
+                                    var dirName = Path.GetFileName(subDir);
+                                    if (!dirName.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                                        continue;
+
+                                    var dirInfo = new DirectoryInfo(subDir);
+                                    var relPath = Path.GetDirectoryName(subDir)!.TrimEnd('\\');
+
+                                    lock (batchLock)
+                                    {
+                                        batch.Add(new FileSystemEntry
+                                        {
+                                            Name = dirName,
+                                            FullPath = subDir,
+                                            IsDirectory = true,
+                                            Modified = FileSystemEntry.SafeGetLastWrite(dirInfo),
+                                            RelativePath = relPath
+                                        });
+                                        totalFound++;
+
+                                        if (batch.Count >= 100)
+                                        {
+                                            var copy = batch.ToList();
+                                            batch.Clear();
+                                            var captured = totalFound;
+
+                                            Application.Current.Dispatcher.InvokeAsync(() =>
+                                            {
+                                                foreach (var e in copy) Entries.Add(e);
+                                                StatusText = $"Найдено: {captured}";
+                                            }, System.Windows.Threading.DispatcherPriority.Background);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
+                                {
+                                    // skip inaccessible entries
+                                }
+                            }
+
+                            foreach (var file in files)
+                            {
+                                if (token.IsCancellationRequested) return;
+
+                                try
+                                {
+                                    var fileName = Path.GetFileName(file);
+                                    if (!fileName.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                                        continue;
+
+                                    var fileInfo = new FileInfo(file);
+                                    var relPath = Path.GetDirectoryName(file)!.TrimEnd('\\');
+
+                                    lock (batchLock)
+                                    {
+                                        batch.Add(new FileSystemEntry
+                                        {
+                                            Name = fileName,
+                                            FullPath = file,
+                                            IsDirectory = false,
+                                            SizeBytes = FileSystemEntry.SafeGetLength(fileInfo),
+                                            Modified = FileSystemEntry.SafeGetLastWrite(fileInfo),
+                                            Extension = fileInfo.Extension,
+                                            RelativePath = relPath
+                                        });
+                                        totalFound++;
+
+                                        if (batch.Count >= 100)
+                                        {
+                                            var copy = batch.ToList();
+                                            batch.Clear();
+                                            var captured = totalFound;
+
+                                            Application.Current.Dispatcher.InvokeAsync(() =>
+                                            {
+                                                foreach (var e in copy) Entries.Add(e);
+                                                StatusText = $"Найдено: {captured}";
+                                            }, System.Windows.Threading.DispatcherPriority.Background);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
+                                {
+                                    // skip inaccessible entries
+                                }
+                            }
+                        }
+                    });
+                }
+                catch (OperationCanceledException) { }
+                catch (AggregateException ae) when (token.IsCancellationRequested)
+                {
+                    ae.Handle(ex => ex is OperationCanceledException);
+                }
+            }, token);
+
+            if (token.IsCancellationRequested) return;
+
+            // Flush remaining batch
+            List<FileSystemEntry> remaining;
+            lock (batchLock)
+            {
+                remaining = batch.ToList();
+                totalFound += remaining.Count;
+                batch.Clear();
+            }
+
+            if (remaining.Count > 0)
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var e in remaining) Entries.Add(e);
+                }, System.Windows.Threading.DispatcherPriority.Background);
+            }
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                EntriesView.Refresh();
+                IsSearchEmpty = totalFound == 0;
+                StatusText = totalFound > 0
+                    ? $"Найдено: {totalFound}"
+                    : "Ничего не найдено";
+                IsLoading = false;
+            });
         }
 
         private void UpdateStatusAfterFilter()

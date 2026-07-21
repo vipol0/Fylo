@@ -16,6 +16,11 @@ namespace FastExplorer.Models
         public long SizeBytes { get; init; }
         public DateTime Modified { get; init; }
         public string Extension { get; init; } = string.Empty;
+        public string RelativePath { get; init; } = string.Empty;
+
+        public string DisplayName => string.IsNullOrEmpty(RelativePath) ? Name : $@"{RelativePath}\{Name}";
+
+        public bool HasRelativePath => !string.IsNullOrEmpty(RelativePath);
 
         /// <summary>Человекочитаемый размер (пусто для папок).</summary>
         public string SizeDisplay => IsDirectory ? string.Empty : FormatSize(SizeBytes);
@@ -51,13 +56,13 @@ namespace FastExplorer.Models
             };
         }
 
-        private static DateTime SafeGetLastWrite(FileSystemInfo info)
+        internal static DateTime SafeGetLastWrite(FileSystemInfo info)
         {
             try { return info.LastWriteTime; }
             catch { return DateTime.MinValue; }
         }
 
-        private static long SafeGetLength(FileInfo file)
+        internal static long SafeGetLength(FileInfo file)
         {
             try { return file.Length; }
             catch { return 0; }
