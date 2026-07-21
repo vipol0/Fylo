@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Data;
+using FastExplorer.Dialogs;
 using FastExplorer.Helpers;
 using FastExplorer.Models;
 using FastExplorer.Services;
@@ -16,6 +17,7 @@ namespace FastExplorer.ViewModels
     public sealed class MainViewModel : ViewModelBase
     {
         private readonly DirectoryReaderService _reader = new();
+        private readonly FileSystemOperationService _operationService = new();
         private readonly DriveEnumeratorService _driveEnumerator = new();
         private readonly List<string> _backStack = new();
         private readonly List<string> _forwardStack = new();
@@ -29,6 +31,22 @@ namespace FastExplorer.ViewModels
         private FileSystemEntry? _selectedEntry;
         private string _sortColumn = "Name";
         private ListSortDirection _sortDirection = ListSortDirection.Ascending;
+        private string _searchText = string.Empty;
+        private string? _editingEntryFullPath;
+        private string? _pendingRenameText;
+        private bool _isSearchEmpty;
+
+        public string? EditingEntryFullPath
+        {
+            get => _editingEntryFullPath;
+            set => SetField(ref _editingEntryFullPath, value);
+        }
+
+        public string? PendingRenameText
+        {
+            get => _pendingRenameText;
+            set => SetField(ref _pendingRenameText, value);
+        }
 
         public ObservableCollection<FileSystemEntry> Entries { get; } = new();
         public ObservableCollection<DriveEntry> Drives { get; } = new();
@@ -59,6 +77,28 @@ namespace FastExplorer.ViewModels
             private set => SetField(ref _isLoading, value);
         }
 
+        public string SearchText
+        {
+            get => _searchText;
+            set
+            {
+                if (SetField(ref _searchText, value))
+                {
+                    EntriesView.Refresh();
+                    OnPropertyChanged(nameof(IsSearchActive));
+                    UpdateStatusAfterFilter();
+                }
+            }
+        }
+
+        public bool IsSearchActive => !string.IsNullOrEmpty(_searchText);
+
+        public bool IsSearchEmpty
+        {
+            get => _isSearchEmpty;
+            private set => SetField(ref _isSearchEmpty, value);
+        }
+
         public FileSystemEntry? SelectedEntry
         {
             get => _selectedEntry;
@@ -73,12 +113,20 @@ namespace FastExplorer.ViewModels
         public RelayCommand OpenEntryCommand { get; }
         public RelayCommand SortByColumnCommand { get; }
         public RelayCommand NavigateToDriveCommand { get; }
+        public RelayCommand ClearSearchCommand { get; }
+        public RelayCommand CreateFolderCommand { get; }
+        public RelayCommand CreateFileCommand { get; }
+        public RelayCommand DeleteEntryCommand { get; }
+        public RelayCommand RenameEntryCommand { get; }
+        public RelayCommand CommitRenameCommand { get; }
+        public RelayCommand CancelRenameCommand { get; }
 
         public MainViewModel()
         {
             EntriesView = CollectionViewSource.GetDefaultView(Entries);
             EntriesView.SortDescriptions.Add(new SortDescription(nameof(FileSystemEntry.IsDirectory), ListSortDirection.Descending));
             EntriesView.SortDescriptions.Add(new SortDescription(_sortColumn, _sortDirection));
+            EntriesView.Filter = FilterPredicate;
 
             NavigateBackCommand = new RelayCommand(_ => NavigateBack(), _ => _backStack.Count > 0);
             NavigateForwardCommand = new RelayCommand(_ => NavigateForward(), _ => _forwardStack.Count > 0);
@@ -88,6 +136,14 @@ namespace FastExplorer.ViewModels
             OpenEntryCommand = new RelayCommand(param => OpenEntry(param as FileSystemEntry));
             SortByColumnCommand = new RelayCommand(param => SortByColumn(param as string));
             NavigateToDriveCommand = new RelayCommand(param => NavigateToDrive(param as DriveEntry));
+            ClearSearchCommand = new RelayCommand(_ => ClearSearch());
+
+            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath));
+            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath));
+            DeleteEntryCommand = new RelayCommand(_ => DeleteSelectedEntry(), _ => SelectedEntry != null);
+            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null);
+            CommitRenameCommand = new RelayCommand(_ => CommitRename());
+            CancelRenameCommand = new RelayCommand(_ => CancelRename());
 
             LoadDrives();
 
@@ -141,7 +197,7 @@ namespace FastExplorer.ViewModels
 
                 CurrentPath = path;
                 AddressBarText = path;
-                StatusText = $"Элементов: {Entries.Count}";
+                UpdateStatusAfterFilter();
 
                 NavigateBackCommand.RaiseCanExecuteChanged();
                 NavigateForwardCommand.RaiseCanExecuteChanged();
@@ -225,6 +281,129 @@ namespace FastExplorer.ViewModels
                 {
                     StatusText = $"Не удалось открыть файл: {ex.Message}";
                 }
+            }
+        }
+
+        private bool FilterPredicate(object obj)
+        {
+            if (string.IsNullOrEmpty(_searchText))
+                return true;
+            if (obj is FileSystemEntry entry)
+                return entry.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+            return true;
+        }
+
+        private void ClearSearch()
+        {
+            SearchText = string.Empty;
+        }
+
+        private void CreateNewFolder()
+        {
+            var baseName = "Новая папка";
+            var path = _operationService.CreateDirectory(CurrentPath, baseName);
+            var dirInfo = new DirectoryInfo(path);
+            var entry = FileSystemEntry.FromDirectory(dirInfo);
+            Entries.Add(entry);
+            SelectedEntry = entry;
+            StartRename();
+        }
+
+        private void CreateNewFile()
+        {
+            var baseName = "Новый файл.txt";
+            var path = _operationService.CreateFile(CurrentPath, baseName);
+            var fileInfo = new FileInfo(path);
+            var entry = FileSystemEntry.FromFile(fileInfo);
+            Entries.Add(entry);
+            SelectedEntry = entry;
+            StartRename();
+        }
+
+        private void DeleteSelectedEntry()
+        {
+            var entry = SelectedEntry;
+            if (entry == null) return;
+
+            var type = entry.IsDirectory ? "папку" : "файл";
+            var message = $"Вы уверены, что хотите удалить {type} \"{entry.Name}\"?\nОн будет перемещён в корзину.";
+            var dialog = new ConfirmDeleteDialog(message);
+            dialog.ShowDialog();
+
+            if (!dialog.Confirmed) return;
+
+            var success = _operationService.DeleteToRecycleBin(entry.FullPath, entry.IsDirectory);
+            if (success)
+            {
+                Entries.Remove(entry);
+                StatusText = $"Удалено: {entry.Name}";
+            }
+            else
+            {
+                StatusText = "Не удалось удалить элемент";
+            }
+        }
+
+        private void StartRename()
+        {
+            var entry = SelectedEntry;
+            if (entry == null) return;
+
+            EditingEntryFullPath = entry.FullPath;
+            PendingRenameText = entry.Name;
+        }
+
+        private void CommitRename()
+        {
+            if (EditingEntryFullPath == null) return;
+
+            var newName = PendingRenameText;
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                CancelRename();
+                return;
+            }
+
+            var entry = Entries.FirstOrDefault(e =>
+                string.Equals(e.FullPath, EditingEntryFullPath, StringComparison.OrdinalIgnoreCase));
+            if (entry == null)
+            {
+                EditingEntryFullPath = null;
+                return;
+            }
+
+            var success = _operationService.Rename(EditingEntryFullPath, newName, entry.IsDirectory);
+            EditingEntryFullPath = null;
+            PendingRenameText = null;
+
+            if (success)
+            {
+                _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
+            }
+            else
+            {
+                StatusText = "Не удалось переименовать";
+            }
+        }
+
+        private void CancelRename()
+        {
+            EditingEntryFullPath = null;
+            PendingRenameText = null;
+        }
+
+        private void UpdateStatusAfterFilter()
+        {
+            if (string.IsNullOrEmpty(_searchText))
+            {
+                StatusText = $"Элементов: {Entries.Count}";
+                IsSearchEmpty = false;
+            }
+            else
+            {
+                var count = EntriesView.Cast<object>().Count();
+                StatusText = $"Найдено: {count} из {Entries.Count}";
+                IsSearchEmpty = count == 0;
             }
         }
 

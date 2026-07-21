@@ -19,6 +19,7 @@
 
     <Window.Resources>
         <conv:IsDirectoryToIconConverter x:Key="IsDirectoryToIconConverter"/>
+        <conv:IsEditingConverter x:Key="IsEditingConverter"/>
     </Window.Resources>
 
     <Grid>
@@ -102,22 +103,30 @@
         <Border Grid.Row="1" Background="{StaticResource PanelBackgroundBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Vertical" Margin="8,6,8,6">
-                <StackPanel Orientation="Horizontal">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="220"/>
+                    </Grid.ColumnDefinitions>
 
-                    <Button Content="&#x2190;" ToolTip="Назад" Width="32" Height="30"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Command="{Binding NavigateBackCommand}"/>
-                    <Button Content="&#x2192;" ToolTip="Вперёд" Width="32" Height="30"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Command="{Binding NavigateForwardCommand}"/>
-                    <Button Content="&#x2191;" ToolTip="Вверх" Width="32" Height="30"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Command="{Binding NavigateUpCommand}"/>
-                    <Button Content="&#x21BB;" ToolTip="Обновить (F5)" Width="32" Height="30"
-                            Style="{StaticResource ToolbarButtonStyle}"
-                            Command="{Binding RefreshCommand}"/>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button Content="&#x2190;" ToolTip="Назад" Width="32" Height="30"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                Command="{Binding NavigateBackCommand}"/>
+                        <Button Content="&#x2192;" ToolTip="Вперёд" Width="32" Height="30"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                Command="{Binding NavigateForwardCommand}"/>
+                        <Button Content="&#x2191;" ToolTip="Вверх" Width="32" Height="30"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                Command="{Binding NavigateUpCommand}"/>
+                        <Button Content="&#x21BB;" ToolTip="Обновить (F5)" Width="32" Height="30"
+                                Style="{StaticResource ToolbarButtonStyle}"
+                                Command="{Binding RefreshCommand}"/>
+                    </StackPanel>
 
-                    <TextBox
+                    <TextBox Grid.Column="1"
                              Margin="8,0,0,0"
                              Style="{StaticResource AddressBarStyle}"
                              Text="{Binding AddressBarText, UpdateSourceTrigger=PropertyChanged}"
@@ -127,7 +136,40 @@
                             <KeyBinding Key="Return" Command="{Binding GoToAddressCommand}"/>
                         </TextBox.InputBindings>
                     </TextBox>
-                </StackPanel>
+
+                    <Border Grid.Column="2" Width="8"/>
+
+                    <Border Grid.Column="3" Style="{StaticResource SearchBoxContainerStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="&#x1F50D;" FontSize="13"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center" Margin="8,0,4,0"/>
+
+                            <TextBox x:Name="SearchBox" Grid.Column="1"
+                                     Style="{StaticResource SearchInputStyle}"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     KeyDown="SearchBox_KeyDown"
+                                     ToolTip="Поиск по имени файла (Ctrl+F)">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Escape" Command="{Binding ClearSearchCommand}"/>
+                                </TextBox.InputBindings>
+                            </TextBox>
+
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource ClearSearchButtonStyle}"
+                                    Command="{Binding ClearSearchCommand}"
+                                    Visibility="{Binding IsSearchActive, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"
+                                    ToolTip="Очистить поиск"
+                                    Content="&#x2715;"/>
+                        </Grid>
+                    </Border>
+                </Grid>
             </StackPanel>
         </Border>
 
@@ -211,7 +253,17 @@
                       VirtualizingPanel.ScrollUnit="Pixel"
                       ScrollViewer.CanContentScroll="True"
                       SelectionMode="Extended"
-                      AlternationCount="2">
+                      AlternationCount="2"
+                      ContextMenuOpening="FilesListView_ContextMenuOpening">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Создать папку" Command="{Binding CreateFolderCommand}"/>
+                        <MenuItem Header="Создать файл" Command="{Binding CreateFileCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="Переименовать" Command="{Binding RenameEntryCommand}"/>
+                        <MenuItem Header="Удалить" Command="{Binding DeleteEntryCommand}"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
 
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
@@ -261,8 +313,42 @@
                             </GridViewColumn.Header>
                             <GridViewColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
+                                    <Grid>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Visibility>
+                                                <MultiBinding Converter="{StaticResource IsEditingConverter}"
+                                                              ConverterParameter="Invert">
+                                                    <Binding Path="FullPath"/>
+                                                    <Binding Path="DataContext.EditingEntryFullPath"
+                                                             RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Visibility>
+                                        </TextBlock>
+                                        <TextBox x:Name="RenameTextBox"
+                                                 Text="{Binding DataContext.PendingRenameText, RelativeSource={RelativeSource AncestorType=ListView}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 VerticalAlignment="Center"
+                                                 Background="{StaticResource PanelBackgroundBrush}"
+                                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                                 BorderBrush="{StaticResource BorderBrush}"
+                                                 BorderThickness="1"
+                                                 Padding="2,1"
+                                                 CaretBrush="{StaticResource TextPrimaryBrush}">
+                                            <TextBox.Visibility>
+                                                <MultiBinding Converter="{StaticResource IsEditingConverter}">
+                                                    <Binding Path="FullPath"/>
+                                                    <Binding Path="DataContext.EditingEntryFullPath"
+                                                             RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBox.Visibility>
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Return"
+                                                            Command="{Binding DataContext.CommitRenameCommand, RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                                <KeyBinding Key="Escape"
+                                                            Command="{Binding DataContext.CancelRenameCommand, RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+                                    </Grid>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>
                         </GridViewColumn>
@@ -313,6 +399,15 @@
                     </GridView>
                 </ListView.View>
             </ListView>
+
+            <!-- Подсказка при пустом результате поиска -->
+            <TextBlock Text="No results found"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="15"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Visibility="{Binding IsSearchEmpty, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
 
             <!-- Индикатор загрузки поверх списка -->
             <Border Background="#B01E1F22"
