@@ -313,6 +313,12 @@
                         <MenuItem Header="Удалить" Command="{Binding DeleteEntryCommand}"/>
                         <MenuItem Header="Очистить корзину" Command="{Binding EmptyRecycleBinCommand}"
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Открыть" Command="{Binding OpenEntryCommand}"
+                                  CommandParameter="{Binding SelectedEntry}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Открыть от администратора" Command="{Binding OpenAsAdminCommand}"
+                                  CommandParameter="{Binding SelectedEntry}"
+                                  Visibility="{Binding CanOpenAsAdmin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Добавить в избранное"
                                   Command="{Binding AddToFavoritesCommand}"
                                   Visibility="{Binding CanAddToFavorites, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>

@@ -79,6 +79,7 @@ namespace Fylo.ViewModels
             RenameEntryCommand.RaiseCanExecuteChanged();
             AddToFavoritesCommand.RaiseCanExecuteChanged();
             OpenFileLocationCommand.RaiseCanExecuteChanged();
+            OpenAsAdminCommand.RaiseCanExecuteChanged();
         }
 
         private void OnSelectedTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -88,6 +89,7 @@ namespace Fylo.ViewModels
             if (e.PropertyName == nameof(TabViewModel.SelectedEntry))
             {
                 OnPropertyChanged(nameof(CanAddToFavorites));
+                OnPropertyChanged(nameof(CanOpenAsAdmin));
             }
             else if (e.PropertyName == nameof(TabViewModel.CurrentPath))
             {
@@ -183,6 +185,7 @@ namespace Fylo.ViewModels
         public RelayCommand AddToFavoritesCommand { get; }
         public RelayCommand RemoveFromFavoritesCommand { get; }
         public RelayCommand OpenFileLocationCommand { get; }
+        public RelayCommand OpenAsAdminCommand { get; }
         public RelayCommand OpenSidebarItemLocationCommand { get; }
         public RelayCommand RestoreRecycleBinEntryCommand { get; }
         public RelayCommand EmptyRecycleBinCommand { get; }
@@ -272,6 +275,10 @@ namespace Fylo.ViewModels
                 _ => SelectedTab?.OpenFileLocationCommand.Execute(null),
                 _ => SelectedTab?.OpenFileLocationCommand.CanExecute(null) ?? false);
 
+            OpenAsAdminCommand = new RelayCommand(
+                param => SelectedTab?.OpenAsAdminCommand.Execute(param),
+                _ => SelectedTab?.OpenAsAdminCommand.CanExecute(null) ?? false);
+
             OpenSidebarItemLocationCommand = new RelayCommand(param =>
             {
                 if (param is SidebarTreeItem item && !string.IsNullOrEmpty(item.Path))
@@ -304,6 +311,9 @@ namespace Fylo.ViewModels
                        !_favoritesService.Contains(entry.FullPath);
             }
         }
+
+        public bool CanOpenAsAdmin =>
+            SelectedTab?.CanOpenAsAdmin ?? false;
 
         // ===== Tab Management =====
 

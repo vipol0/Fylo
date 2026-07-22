@@ -52,6 +52,12 @@ namespace Fylo.ViewModels
         private bool _isSearchEmpty;
         private bool _isSearching;
 
+        private static readonly System.Collections.Generic.HashSet<string> ExecutableExtensions = new(System.StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".com", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
+            ".wsf", ".wsh", ".msc", ".scr", ".pif"
+        };
+
         public string DisplayName
         {
             get => _displayName;
@@ -196,12 +202,16 @@ namespace Fylo.ViewModels
                 if (SetField(ref _selectedEntry, value))
                 {
                     OnPropertyChanged(nameof(CanAddToFavorites));
+                    OnPropertyChanged(nameof(CanOpenAsAdmin));
                 }
             }
         }
 
         public bool CanAddToFavorites =>
             SelectedEntry is { IsDirectory: true };
+
+        public bool CanOpenAsAdmin =>
+            SelectedEntry != null && !SelectedEntry.IsDirectory && ExecutableExtensions.Contains(SelectedEntry.Extension ?? "");
 
         public int BackStackCount => _backStack.Count;
         public int ForwardStackCount => _forwardStack.Count;
@@ -222,6 +232,7 @@ namespace Fylo.ViewModels
         public RelayCommand CommitRenameCommand { get; }
         public RelayCommand CancelRenameCommand { get; }
         public RelayCommand OpenFileLocationCommand { get; }
+        public RelayCommand OpenAsAdminCommand { get; }
         public RelayCommand RestoreRecycleBinEntryCommand { get; }
 
         public TabViewModel(DirectoryReaderService reader, FileSystemOperationService operationService, string startPath)
@@ -264,6 +275,10 @@ namespace Fylo.ViewModels
             OpenFileLocationCommand = new RelayCommand(
                 _ => OpenFileLocation(),
                 _ => SelectedEntry != null);
+
+            OpenAsAdminCommand = new RelayCommand(
+                param => OpenAsAdmin(param as FileSystemEntry),
+                _ => CanOpenAsAdmin);
 
             _ = LoadDirectoryAsync(startPath, pushHistory: false);
         }
@@ -455,6 +470,25 @@ namespace Fylo.ViewModels
                 {
                     StatusText = $"Не удалось открыть файл: {ex.Message}";
                 }
+            }
+        }
+
+        public void OpenAsAdmin(FileSystemEntry? entry)
+        {
+            if (entry == null) return;
+
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(entry.FullPath)
+                {
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Не удалось открыть: {ex.Message}";
             }
         }
 
