@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -33,6 +34,8 @@ namespace Fylo.Services
         public bool Contains(string path) =>
             _favorites.Any(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
 
+        public void Save() => SaveToFile();
+
         public void Add(string path)
         {
             if (!Contains(path))
@@ -58,12 +61,20 @@ namespace Fylo.Services
                 {
                     var json = File.ReadAllText(_filePath);
                     var list = JsonSerializer.Deserialize<List<string>>(json);
-                    if (list != null && list.Count > 0)
+                    if (list != null)
                         return list;
                 }
+                else
+                {
+                    var defaults = new List<string>(DefaultFavorites);
+                    var json = JsonSerializer.Serialize(defaults);
+                    File.WriteAllText(_filePath, json);
+                    return defaults;
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[FavoritesService] LoadFromFile error: {ex}");
             }
             return new List<string>(DefaultFavorites);
         }
@@ -75,8 +86,9 @@ namespace Fylo.Services
                 var json = JsonSerializer.Serialize(_favorites);
                 File.WriteAllText(_filePath, json);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[FavoritesService] SaveToFile error: {ex}");
             }
         }
     }

@@ -16,6 +16,11 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Fylo.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Fylo.ico" />
+  </ItemGroup>
 
 </Project>

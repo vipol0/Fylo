@@ -302,6 +302,8 @@ namespace Fylo.ViewModels
             AddTab();
         }
 
+        public void SaveFavorites() => _favoritesService.Save();
+
         public bool CanAddToFavorites
         {
             get

@@ -3,3 +3,15 @@ obj/
 *.user
 *.suo
 .vs/
+*.userosscache
+*.sln.docstates
+*.DotSettings*
+_ReSharper*/
+*.nupkg
+[Tt]est[Rr]esult*/
+*.trx
+.idea/
+*.sln.iml
+.vscode/
+*.snk
+*.pfx

@@ -26,9 +26,11 @@ namespace Fylo
         public MainWindow()
         {
             InitializeComponent();
+            Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Fylo.ico"));
             ViewModel = new MainViewModel();
             DataContext = ViewModel;
 
+            Closed += (_, _) => ViewModel.SaveFavorites();
             StateChanged += (_, _) => UpdateMaximizeRestoreIcons();
 
             InputBindings.Add(new KeyBinding(ViewModel.RefreshCommand, Key.F5, ModifierKeys.None));
