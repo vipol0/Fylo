@@ -447,6 +447,10 @@
                                       Command="{Binding DataContext.RemoveFromFavoritesCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
                                       CommandParameter="{Binding}"
                                       Visibility="{Binding IsFavorite, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                            <MenuItem Header="Открыть расположение"
+                                      Command="{Binding DataContext.OpenSidebarItemLocationCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                      CommandParameter="{Binding}"
+                                      Visibility="{Binding CanOpenLocation, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         </ContextMenu>
                     </Grid.ContextMenu>
                     <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>

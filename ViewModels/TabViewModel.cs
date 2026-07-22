@@ -50,6 +50,7 @@ namespace Fylo.ViewModels
         private string? _editingEntryFullPath;
         private string? _pendingRenameText;
         private bool _isSearchEmpty;
+        private bool _isSearching;
 
         public string DisplayName
         {
@@ -129,6 +130,9 @@ namespace Fylo.ViewModels
                         _ = RunRecursiveSearchAsync(roots, value);
                     }
                     OnPropertyChanged(nameof(IsSearchActive));
+                    CreateFolderCommand.RaiseCanExecuteChanged();
+                    CreateFileCommand.RaiseCanExecuteChanged();
+                    RenameEntryCommand.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -139,6 +143,12 @@ namespace Fylo.ViewModels
         {
             get => _isSearchEmpty;
             set => SetField(ref _isSearchEmpty, value);
+        }
+
+        public bool IsSearching
+        {
+            get => _isSearching;
+            set => SetField(ref _isSearching, value);
         }
 
         public SearchScope CurrentSearchScope
@@ -211,6 +221,7 @@ namespace Fylo.ViewModels
         public RelayCommand RenameEntryCommand { get; }
         public RelayCommand CommitRenameCommand { get; }
         public RelayCommand CancelRenameCommand { get; }
+        public RelayCommand OpenFileLocationCommand { get; }
         public RelayCommand RestoreRecycleBinEntryCommand { get; }
 
         public TabViewModel(DirectoryReaderService reader, FileSystemOperationService operationService, string startPath)
@@ -239,16 +250,20 @@ namespace Fylo.ViewModels
             ClearSearchCommand = new RelayCommand(_ => ClearSearch());
             ToggleSearchScopeCommand = new RelayCommand(_ => ToggleSearchScope());
 
-            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin);
-            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin);
+            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin && !IsSearchActive);
+            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin && !IsSearchActive);
             DeleteEntryCommand = new RelayCommand(_ => DeleteSelectedEntry(), _ => SelectedEntry != null);
-            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null && !_isShowingRecycleBin);
+            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null && !_isShowingRecycleBin && !IsSearchActive);
             CommitRenameCommand = new RelayCommand(_ => CommitRename());
             CancelRenameCommand = new RelayCommand(_ => CancelRename());
 
             RestoreRecycleBinEntryCommand = new RelayCommand(
                 _ => RestoreSelectedRecycleBinEntry(),
                 _ => SelectedEntry != null && _isShowingRecycleBin);
+
+            OpenFileLocationCommand = new RelayCommand(
+                _ => OpenFileLocation(),
+                _ => SelectedEntry != null);
 
             _ = LoadDirectoryAsync(startPath, pushHistory: false);
         }
@@ -588,6 +603,38 @@ namespace Fylo.ViewModels
             }
         }
 
+        private void OpenFileLocation()
+        {
+            _ = OpenFileLocationAsync();
+        }
+
+        private async Task OpenFileLocationAsync()
+        {
+            var entry = SelectedEntry;
+            if (entry == null) return;
+
+            try
+            {
+                SearchText = string.Empty;
+
+                var parentPath = Path.GetDirectoryName(entry.FullPath.TrimEnd('\\'));
+                if (string.IsNullOrEmpty(parentPath)) return;
+
+                await LoadDirectoryAsync(parentPath, pushHistory: true);
+
+                var target = Entries.FirstOrDefault(e =>
+                    string.Equals(e.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+                if (target != null)
+                    SelectedEntry = target;
+
+                StatusText = $"Открыто расположение: {entry.Name}";
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Не удалось открыть расположение: {ex.Message}";
+            }
+        }
+
         private void RestoreSelectedRecycleBinEntry()
         {
             var entry = SelectedEntry;
@@ -732,6 +779,7 @@ namespace Fylo.ViewModels
             }
 
             IsLoading = true;
+            IsSearching = true;
             StatusText = "Поиск...";
             Entries.Clear();
 
@@ -818,7 +866,8 @@ namespace Fylo.ViewModels
                                             Application.Current.Dispatcher.InvokeAsync(() =>
                                             {
                                                 foreach (var e in copy) Entries.Add(e);
-                                                StatusText = $"Найдено: {captured}";
+                                                IsSearching = false;
+                                                StatusText = $"Найдено: {captured} (сканирование...)";
                                             }, System.Windows.Threading.DispatcherPriority.Background);
                                         }
                                     }
@@ -864,7 +913,8 @@ namespace Fylo.ViewModels
                                             Application.Current.Dispatcher.InvokeAsync(() =>
                                             {
                                                 foreach (var e in copy) Entries.Add(e);
-                                                StatusText = $"Найдено: {captured}";
+                                                IsSearching = false;
+                                                StatusText = $"Найдено: {captured} (сканирование...)";
                                             }, System.Windows.Threading.DispatcherPriority.Background);
                                         }
                                     }
@@ -898,6 +948,7 @@ namespace Fylo.ViewModels
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var e in remaining) Entries.Add(e);
+                    IsSearching = false;
                 }, System.Windows.Threading.DispatcherPriority.Background);
             }
 
@@ -905,6 +956,7 @@ namespace Fylo.ViewModels
             {
                 EntriesView.Refresh();
                 IsSearchEmpty = totalFound == 0;
+                IsSearching = false;
                 StatusText = totalFound > 0
                     ? $"Найдено: {totalFound}"
                     : "Ничего не найдено";

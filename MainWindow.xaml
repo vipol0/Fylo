@@ -298,7 +298,8 @@
                       SelectionMode="Extended"
                       AlternationCount="2"
                       ContextMenuOpening="FilesListView_ContextMenuOpening"
-                      PreviewMouseWheel="FilesListView_PreviewMouseWheel">
+                      PreviewMouseWheel="FilesListView_PreviewMouseWheel"
+                      SelectionChanged="FilesListView_SelectionChanged">
                 <ListView.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Создать папку" Command="{Binding CreateFolderCommand}"
@@ -315,6 +316,8 @@
                         <MenuItem Header="Добавить в избранное"
                                   Command="{Binding AddToFavoritesCommand}"
                                   Visibility="{Binding CanAddToFavorites, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Открыть расположение"
+                                  Command="{Binding OpenFileLocationCommand}"/>
                     </ContextMenu>
                 </ListView.ContextMenu>
 
@@ -460,6 +463,15 @@
                 </ListView.View>
             </ListView>
 
+            <!-- Подсказка во время поиска -->
+            <TextBlock Text="Поиск..."
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="15"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Visibility="{Binding IsSearching, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+
             <!-- Подсказка при пустом результате поиска -->
             <TextBlock Text="No results found"
                        Foreground="{StaticResource TextSecondaryBrush}"
@@ -469,12 +481,6 @@
                        IsHitTestVisible="False"
                        Visibility="{Binding IsSearchEmpty, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
 
-            <!-- Индикатор загрузки поверх списка -->
-            <Border Background="#B01E1F22"
-                    Visibility="{Binding IsLoading, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
-                <TextBlock Text="Загрузка..." Foreground="{StaticResource TextPrimaryBrush}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14"/>
-            </Border>
             </Grid>
         </Grid>
 

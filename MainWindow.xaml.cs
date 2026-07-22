@@ -261,6 +261,21 @@ namespace Fylo
             }
         }
 
+        private void FilesListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (FilesListView.SelectedItem != null)
+            {
+                FilesListView.Dispatcher.BeginInvoke(() =>
+                {
+                    FilesListView.ScrollIntoView(FilesListView.SelectedItem);
+                    if (FilesListView.ItemContainerGenerator.ContainerFromItem(FilesListView.SelectedItem) is ListViewItem item)
+                    {
+                        item.Focus();
+                    }
+                });
+            }
+        }
+
         private void FilesListView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (Keyboard.Modifiers != ModifierKeys.Shift) return;

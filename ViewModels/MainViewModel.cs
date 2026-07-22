@@ -54,6 +54,7 @@ namespace Fylo.ViewModels
             OnPropertyChanged(nameof(SearchText));
             OnPropertyChanged(nameof(IsSearchActive));
             OnPropertyChanged(nameof(IsSearchEmpty));
+            OnPropertyChanged(nameof(IsSearching));
             OnPropertyChanged(nameof(CanAddToFavorites));
             OnPropertyChanged(nameof(EditingEntryFullPath));
             OnPropertyChanged(nameof(PendingRenameText));
@@ -77,6 +78,7 @@ namespace Fylo.ViewModels
             DeleteEntryCommand.RaiseCanExecuteChanged();
             RenameEntryCommand.RaiseCanExecuteChanged();
             AddToFavoritesCommand.RaiseCanExecuteChanged();
+            OpenFileLocationCommand.RaiseCanExecuteChanged();
         }
 
         private void OnSelectedTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -92,9 +94,12 @@ namespace Fylo.ViewModels
                 UpdateSidebarSelection();
                 SelectedTab?.ScheduleFolderSizing();
             }
-            else if (e.PropertyName is nameof(TabViewModel.IsShowingRecycleBin) or nameof(TabViewModel.RecycleBinItemCount))
+            else if (e.PropertyName is nameof(TabViewModel.IsShowingRecycleBin) or nameof(TabViewModel.RecycleBinItemCount) or nameof(TabViewModel.IsSearchActive))
             {
                 OnPropertyChanged(e.PropertyName);
+                CreateFolderCommand.RaiseCanExecuteChanged();
+                CreateFileCommand.RaiseCanExecuteChanged();
+                RenameEntryCommand.RaiseCanExecuteChanged();
             }
         }
 
@@ -115,6 +120,7 @@ namespace Fylo.ViewModels
         }
         public bool IsSearchActive => SelectedTab?.IsSearchActive ?? false;
         public bool IsSearchEmpty => SelectedTab?.IsSearchEmpty ?? false;
+        public bool IsSearching => SelectedTab?.IsSearching ?? false;
         public string? EditingEntryFullPath => SelectedTab?.EditingEntryFullPath;
         public string? PendingRenameText
         {
@@ -176,6 +182,8 @@ namespace Fylo.ViewModels
         public RelayCommand ToggleDrivePanelCommand { get; }
         public RelayCommand AddToFavoritesCommand { get; }
         public RelayCommand RemoveFromFavoritesCommand { get; }
+        public RelayCommand OpenFileLocationCommand { get; }
+        public RelayCommand OpenSidebarItemLocationCommand { get; }
         public RelayCommand RestoreRecycleBinEntryCommand { get; }
         public RelayCommand EmptyRecycleBinCommand { get; }
 
@@ -260,6 +268,22 @@ namespace Fylo.ViewModels
                 _ => SelectedTab?.RestoreRecycleBinEntryCommand.Execute(null),
                 _ => SelectedTab?.RestoreRecycleBinEntryCommand.CanExecute(null) ?? false);
 
+            OpenFileLocationCommand = new RelayCommand(
+                _ => SelectedTab?.OpenFileLocationCommand.Execute(null),
+                _ => SelectedTab?.OpenFileLocationCommand.CanExecute(null) ?? false);
+
+            OpenSidebarItemLocationCommand = new RelayCommand(param =>
+            {
+                if (param is SidebarTreeItem item && !string.IsNullOrEmpty(item.Path))
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.Path) { UseShellExecute = true });
+                    }
+                    catch { }
+                }
+            });
+
             EmptyRecycleBinCommand = new RelayCommand(
                 _ => SelectedTab?.EmptyRecycleBin());
 
@@ -329,6 +353,8 @@ namespace Fylo.ViewModels
         public void NavigateToSidebarItem(SidebarTreeItem? item)
         {
             if (item == null) return;
+
+            SelectedTab?.ClearSearchCommand.Execute(null);
 
             if (item.ItemType == SidebarItemType.RecycleBin)
             {

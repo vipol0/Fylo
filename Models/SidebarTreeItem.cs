@@ -49,6 +49,9 @@ namespace Fylo.Models
             set => SetField(ref _isSelected, value);
         }
 
+        public bool CanOpenLocation =>
+            !string.IsNullOrEmpty(Path) && !string.Equals(Path, "recyclebin:", StringComparison.OrdinalIgnoreCase);
+
         public ObservableCollection<SidebarTreeItem> Children { get; } = new();
 
         private static string FormatSize(long bytes)
