@@ -305,16 +305,13 @@
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Создать файл" Command="{Binding CreateFileCommand}"
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
-                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Восстановить" Command="{Binding RestoreRecycleBinEntryCommand}"
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Переименовать" Command="{Binding RenameEntryCommand}"
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Удалить" Command="{Binding DeleteEntryCommand}"/>
-                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Очистить корзину" Command="{Binding EmptyRecycleBinCommand}"
                                   Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
-                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Добавить в избранное"
                                   Command="{Binding AddToFavoritesCommand}"
                                   Visibility="{Binding CanAddToFavorites, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
