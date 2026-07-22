@@ -4,20 +4,24 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using FastExplorer.Helpers;
-using FastExplorer.Models;
-using FastExplorer.ViewModels;
+using Fylo.Helpers;
+using Fylo.Models;
+using Fylo.ViewModels;
 
-namespace FastExplorer
+namespace Fylo
 {
     public partial class MainWindow : Window
     {
         private readonly MainViewModel ViewModel;
 
-        private Point _dragPoint;
-        private bool _dragReady;
+        private Point _windowDragPoint;
+        private bool _windowDragReady;
         private bool _isAnimating;
         private bool _pendingToggle;
+
+        private Point _tabDragStartPoint;
+        private bool _isDraggingTab;
+        private TabViewModel? _dragTabViewModel;
 
         public MainWindow()
         {
@@ -28,9 +32,11 @@ namespace FastExplorer
             StateChanged += (_, _) => UpdateMaximizeRestoreIcons();
 
             InputBindings.Add(new KeyBinding(ViewModel.RefreshCommand, Key.F5, ModifierKeys.None));
-            InputBindings.Add(new KeyBinding(new Helpers.RelayCommand(_ => GoBackAlt()), Key.Back, ModifierKeys.None));
-            InputBindings.Add(new KeyBinding(new Helpers.RelayCommand(_ => GoUpAlt()), Key.Up, ModifierKeys.Alt));
+            InputBindings.Add(new KeyBinding(new RelayCommand(_ => GoBackAlt()), Key.Back, ModifierKeys.None));
+            InputBindings.Add(new KeyBinding(new RelayCommand(_ => GoUpAlt()), Key.Up, ModifierKeys.Alt));
             InputBindings.Add(new KeyBinding(new RelayCommand(_ => FocusSearchBox()), Key.F, ModifierKeys.Control));
+            InputBindings.Add(new KeyBinding(ViewModel.AddTabCommand, Key.T, ModifierKeys.Control));
+            InputBindings.Add(new KeyBinding(new RelayCommand(_ => ViewModel.CloseTabCommand.Execute(ViewModel.SelectedTab)), Key.W, ModifierKeys.Control));
 
             InputBindings.Add(new KeyBinding(new RelayCommand(_ => ViewModel.CreateFolderCommand.Execute(null)), Key.N, ModifierKeys.Control | ModifierKeys.Shift));
             InputBindings.Add(new KeyBinding(new RelayCommand(_ => ViewModel.CreateFileCommand.Execute(null)), Key.N, ModifierKeys.Control));
@@ -88,7 +94,138 @@ namespace FastExplorer
             }
         }
 
-        // ========== Кастомный заголовок окна ==========
+        // ========== ТАБ-БАР (оконные операции) ==========
+
+        private void TabBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                if (WindowState == WindowState.Maximized)
+                    SystemCommands.RestoreWindow(this);
+                else
+                    SystemCommands.MaximizeWindow(this);
+                return;
+            }
+
+            _windowDragPoint = e.GetPosition(this);
+            _windowDragReady = true;
+        }
+
+        private void TabBar_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_windowDragReady || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            var pos = e.GetPosition(this);
+            if (Math.Abs(pos.X - _windowDragPoint.X) > 4 || Math.Abs(pos.Y - _windowDragPoint.Y) > 4)
+            {
+                _windowDragReady = false;
+                DragMove();
+            }
+        }
+
+        private void TabBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _windowDragReady = false;
+        }
+
+        private void TabBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var point = PointToScreen(e.GetPosition(this));
+            SystemCommands.ShowSystemMenu(this, point);
+        }
+
+        // ========== ОБРАБОТЧИКИ ВКЛАДОК ==========
+
+        private void TabItem_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not Border border) return;
+            var tab = border.DataContext as TabViewModel;
+            if (tab == null) return;
+
+            if (e.MiddleButton == MouseButtonState.Pressed)
+            {
+                ViewModel.CloseTabCommand.Execute(tab);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                ViewModel.SelectTab(tab);
+                _tabDragStartPoint = e.GetPosition(this);
+                _isDraggingTab = false;
+                _dragTabViewModel = tab;
+                border.CaptureMouse();
+                e.Handled = true;
+            }
+        }
+
+        private void TabItem_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragTabViewModel == null || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            if (sender is not Border border) return;
+
+            var pos = e.GetPosition(this);
+            if (!_isDraggingTab)
+            {
+                if (Math.Abs(pos.X - _tabDragStartPoint.X) > 10)
+                {
+                    _isDraggingTab = true;
+                }
+                return;
+            }
+
+            var tabs = ViewModel.Tabs;
+            var currentIndex = tabs.IndexOf(_dragTabViewModel);
+            if (currentIndex < 0) return;
+
+            var tabItem = TabItemsControl.ItemContainerGenerator.ContainerFromItem(_dragTabViewModel) as ContentPresenter;
+            if (tabItem == null) return;
+
+            var tabWidth = tabItem.ActualWidth;
+            if (tabWidth <= 0) return;
+
+            var offset = pos.X - _tabDragStartPoint.X;
+            var newIndex = currentIndex + (int)(offset / tabWidth);
+            newIndex = System.Math.Clamp(newIndex, 0, tabs.Count - 1);
+
+            if (newIndex != currentIndex)
+            {
+                tabs.Move(currentIndex, newIndex);
+                _tabDragStartPoint = new Point(
+                    _tabDragStartPoint.X + (newIndex - currentIndex) * tabWidth,
+                    _tabDragStartPoint.Y);
+            }
+        }
+
+        private void TabItem_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                border.ReleaseMouseCapture();
+            }
+            _isDraggingTab = false;
+            _dragTabViewModel = null;
+        }
+
+        private void TabItem_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is not Border border) return;
+            var button = FindVisualChild<Button>(border);
+            if (button != null)
+                button.Opacity = 1;
+        }
+
+        private void TabItem_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is not Border border) return;
+            var button = FindVisualChild<Button>(border);
+            if (button != null)
+                button.Opacity = 0;
+        }
 
         private void MinimizeButton_Click(object sender, RoutedEventArgs e)
         {
@@ -108,44 +245,7 @@ namespace FastExplorer
             SystemCommands.CloseWindow(this);
         }
 
-        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ClickCount == 2)
-            {
-                if (WindowState == WindowState.Maximized)
-                    SystemCommands.RestoreWindow(this);
-                else
-                    SystemCommands.MaximizeWindow(this);
-                return;
-            }
-
-            _dragPoint = e.GetPosition(this);
-            _dragReady = true;
-        }
-
-        private void TitleBar_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (!_dragReady || e.LeftButton != MouseButtonState.Pressed)
-                return;
-
-            var pos = e.GetPosition(this);
-            if (Math.Abs(pos.X - _dragPoint.X) > 4 || Math.Abs(pos.Y - _dragPoint.Y) > 4)
-            {
-                _dragReady = false;
-                DragMove();
-            }
-        }
-
-        private void TitleBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            _dragReady = false;
-        }
-
-        private void TitleBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            var point = PointToScreen(e.GetPosition(this));
-            SystemCommands.ShowSystemMenu(this, point);
-        }
+        // ========== Файловый список ==========
 
         private void FilesListView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
@@ -174,6 +274,8 @@ namespace FastExplorer
             else
                 scrollViewer.LineRight();
         }
+
+        // ========== ViewModel PropertyChanged ==========
 
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
@@ -209,6 +311,8 @@ namespace FastExplorer
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
+
+        // ========== Утилиты ==========
 
         private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
@@ -258,6 +362,8 @@ namespace FastExplorer
             }
         }
 
+        // ========== Панель дисков (анимация) ==========
+
         private void SyncIconState()
         {
             HidePanelIcon.Opacity = ViewModel.IsDrivePanelVisible ? 1 : 0;
@@ -288,7 +394,7 @@ namespace FastExplorer
             HidePanelIcon.BeginAnimation(UIElement.OpacityProperty, null);
             ShowPanelIcon.BeginAnimation(UIElement.OpacityProperty, null);
 
-            LeftPanelColumn.Width = new GridLength(Math.Max(0, currentWidth));
+            LeftPanelColumn.Width = new GridLength(System.Math.Max(0, currentWidth));
             LeftPanelBorder.Opacity = currentOpacity;
 
             if (shouldBeVisible)
@@ -363,7 +469,7 @@ namespace FastExplorer
                 new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150)));
         }
 
-
+        // ========== Оконные операции ==========
 
         private void UpdateMaximizeRestoreIcons()
         {

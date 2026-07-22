@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 
-namespace FastExplorer.Helpers
+namespace Fylo.Helpers
 {
     /// <summary>
     /// Включает тёмный системный заголовок окна (title bar) на Windows 10/11

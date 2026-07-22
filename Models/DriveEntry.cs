@@ -1,4 +1,4 @@
-namespace FastExplorer.Models
+namespace Fylo.Models
 {
     /// <summary>
     /// Лёгкая модель диска для боковой панели.

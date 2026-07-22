@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using FastExplorer.Models;
+using Fylo.Models;
 
-namespace FastExplorer.Converters
+namespace Fylo.Converters
 {
     public sealed class SidebarTreeTemplateSelector : DataTemplateSelector
     {

@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using FastExplorer.ViewModels;
+using Fylo.ViewModels;
 
-namespace FastExplorer.Models
+namespace Fylo.Models
 {
     public enum SidebarItemType
     {
@@ -33,7 +33,7 @@ namespace FastExplorer.Models
             : 0;
 
         public string CapacityDisplay => IsReady && TotalSizeBytes > 0
-            ? $"{FormatSize(TotalSizeBytes - FreeSizeBytes)} / {FormatSize(TotalSizeBytes)} · {FormatSize(FreeSizeBytes)} свободно"
+            ? $"{FormatSize(TotalSizeBytes - FreeSizeBytes)} / {FormatSize(TotalSizeBytes)} · {FormatSize(FreeSizeBytes)}"
             : string.Empty;
 
         public bool IsExpanded

@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 
-namespace FastExplorer.Models
+namespace Fylo.Models
 {
     /// <summary>
     /// Лёгкая модель элемента файловой системы (файл или папка).

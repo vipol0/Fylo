@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace FastExplorer.ViewModels
+namespace Fylo.ViewModels
 {
     public abstract class ViewModelBase : INotifyPropertyChanged
     {

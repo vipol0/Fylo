@@ -1,20 +1,16 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using FastExplorer.Models;
+using Fylo.Models;
 
-namespace FastExplorer.Services
+namespace Fylo.Services
 {
-    /// <summary>
-    /// Читает содержимое папки в фоновом потоке.
-    /// Используется EnumerateFileSystemInfos вместо GetFiles/GetDirectories —
-    /// это даёт результаты потоково и быстрее на больших папках.
-    /// </summary>
     public sealed class DirectoryReaderService
     {
-        /// <summary>Известные системные папки, которые пропускаем при подсчёте размера.</summary>
         private static readonly HashSet<string> SkippedSystemDirs = new(StringComparer.OrdinalIgnoreCase)
         {
             "windows", "windows.old",
@@ -37,10 +33,32 @@ namespace FastExplorer.Services
             "$windows.~ws"
         };
 
-        /// <summary>
-        /// Рекурсивно вычисляет размер папки (сумму всех файлов внутри).
-        /// Пропускает системные папки и недоступные директории.
-        /// </summary>
+        private sealed record CacheEntry(DirectoryReadResult Result, DateTime CachedAt)
+        {
+            private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(5);
+
+            public bool IsExpired => DateTime.UtcNow - CachedAt > Ttl;
+        }
+
+        private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+        private readonly ConcurrentDictionary<string, long> _sizeCache = new(StringComparer.OrdinalIgnoreCase);
+
+        public void SetCachedSize(string path, long size) => _sizeCache[path] = size;
+
+        public void SetCachedSizes(IEnumerable<KeyValuePair<string, long>> entries)
+        {
+            foreach (var kvp in entries)
+                _sizeCache[kvp.Key] = kvp.Value;
+        }
+
+        public long? TryGetCachedSize(string path) =>
+            _sizeCache.TryGetValue(path, out var size) ? size : null;
+
+        public void InvalidateSize(string path) => _sizeCache.TryRemove(path, out _);
+
+        public void InvalidateAllSizes() => _sizeCache.Clear();
+
         public static async Task<long> CalculateFolderSizeAsync(string path, CancellationToken token)
         {
             return await Task.Run(() =>
@@ -99,6 +117,20 @@ namespace FastExplorer.Services
 
         public async Task<DirectoryReadResult> ReadDirectoryAsync(string path, CancellationToken token)
         {
+            if (_cache.TryGetValue(path, out var cached) && !cached.IsExpired)
+            {
+                return CloneResult(cached.Result);
+            }
+
+            var result = await ReadDirectoryInternalAsync(path, token);
+
+            _cache[path] = new CacheEntry(result, DateTime.UtcNow);
+
+            return CloneResult(result);
+        }
+
+        private static async Task<DirectoryReadResult> ReadDirectoryInternalAsync(string path, CancellationToken token)
+        {
             var directories = new List<FileSystemEntry>();
             var files = new List<FileSystemEntry>();
 
@@ -110,7 +142,6 @@ namespace FastExplorer.Services
                 {
                     token.ThrowIfCancellationRequested();
 
-                    // Пропускаем скрытые и системные файлы — как в File Pilot по умолчанию
                     if ((entry.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
                         continue;
                     if ((entry.Attributes & FileAttributes.System) == FileAttributes.System)
@@ -127,18 +158,53 @@ namespace FastExplorer.Services
                             files.Add(FileSystemEntry.FromFile(fi));
                         }
                     }
-                    catch (UnauthorizedAccessException)
-                    {
-                        // Пропускаем недоступные элементы, не роняем весь список
-                    }
-                    catch (IOException)
-                    {
-                        // Файл мог быть удалён/заблокирован во время чтения — пропускаем
-                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (IOException) { }
                 }
             }, token);
 
             return new DirectoryReadResult(directories, files);
+        }
+
+        private DirectoryReadResult CloneResult(DirectoryReadResult source)
+        {
+            var dirs = new List<FileSystemEntry>(source.Directories.Count);
+            foreach (var e in source.Directories)
+                dirs.Add(CloneEntry(e));
+
+            var files = new List<FileSystemEntry>(source.Files.Count);
+            foreach (var e in source.Files)
+                files.Add(CloneEntry(e));
+
+            return new DirectoryReadResult(dirs, files);
+        }
+
+        private FileSystemEntry CloneEntry(FileSystemEntry e)
+        {
+            var sizeBytes = e.SizeBytes;
+            if (sizeBytes < 0 && _sizeCache.TryGetValue(e.FullPath, out var cachedSize))
+                sizeBytes = cachedSize;
+
+            return new FileSystemEntry
+            {
+                Name = e.Name,
+                FullPath = e.FullPath,
+                IsDirectory = e.IsDirectory,
+                SizeBytes = sizeBytes,
+                Modified = e.Modified,
+                Extension = e.Extension,
+                RelativePath = e.RelativePath
+            };
+        }
+
+        public void InvalidateCache(string path)
+        {
+            _cache.TryRemove(path, out _);
+        }
+
+        public void InvalidateAll()
+        {
+            _cache.Clear();
         }
     }
 

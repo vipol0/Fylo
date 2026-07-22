@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Input;
 
-namespace FastExplorer.Helpers
+namespace Fylo.Helpers
 {
     /// <summary>
     /// Минималистичная реализация ICommand.

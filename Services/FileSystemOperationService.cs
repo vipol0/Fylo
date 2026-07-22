@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Microsoft.VisualBasic.FileIO;
 
-namespace FastExplorer.Services
+namespace Fylo.Services
 {
     public sealed class FileSystemOperationService
     {

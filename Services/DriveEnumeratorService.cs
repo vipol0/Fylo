@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using FastExplorer.Models;
+using Fylo.Models;
 
-namespace FastExplorer.Services
+namespace Fylo.Services
 {
     /// <summary>
     /// Читает список локальных дисков. Дешёвая операция (не сканирует файлы),

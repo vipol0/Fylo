@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 
-namespace FastExplorer.Services
+namespace Fylo.Services
 {
     public sealed class FavoritesService
     {
@@ -22,7 +22,7 @@ namespace FastExplorer.Services
         {
             var appData = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FastExplorer");
+                "Fylo");
             Directory.CreateDirectory(appData);
             _filePath = Path.Combine(appData, "favorites.json");
             _favorites = LoadFromFile();

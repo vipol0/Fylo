@@ -2,7 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media.Animation;
 
-namespace FastExplorer.Helpers
+namespace Fylo.Helpers
 {
     public sealed class GridLengthAnimation : AnimationTimeline
     {

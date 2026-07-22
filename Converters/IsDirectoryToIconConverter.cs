@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows.Data;
 
-namespace FastExplorer.Converters
+namespace Fylo.Converters
 {
     /// <summary>
     /// Возвращает простой символ (эмодзи-подобный глиф) для папки/файла.

@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace FastExplorer.Dialogs
+namespace Fylo.Dialogs
 {
     public partial class ConfirmDeleteDialog : Window
     {

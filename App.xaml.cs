@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace FastExplorer
+namespace Fylo
 {
     public partial class App : Application
     {

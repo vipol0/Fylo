@@ -1,48 +1,132 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
-using FastExplorer.Dialogs;
-using FastExplorer.Helpers;
-using FastExplorer.Models;
-using FastExplorer.Services;
+using Fylo.Helpers;
+using Fylo.Models;
+using Fylo.Services;
 
-namespace FastExplorer.ViewModels
+namespace Fylo.ViewModels
 {
-    public enum SearchScope { CurrentFolder, AllSubfolders }
-
     public sealed class MainViewModel : ViewModelBase
     {
-        private readonly DirectoryReaderService _reader = new();
-        private readonly FileSystemOperationService _operationService = new();
         private readonly DriveEnumeratorService _driveEnumerator = new();
         private readonly FavoritesService _favoritesService = new();
-        private readonly List<string> _backStack = new();
-        private readonly List<string> _forwardStack = new();
+        private readonly DirectoryReaderService _reader = new();
+        private readonly FileSystemOperationService _operationService = new();
 
-        private CancellationTokenSource? _loadCts;
-        private CancellationTokenSource? _recursiveSearchCts;
-        private CancellationTokenSource? _sizingCts;
-        private SearchScope _searchScope = SearchScope.CurrentFolder;
+        public ObservableCollection<TabViewModel> Tabs { get; } = new();
 
-        private string _currentPath = string.Empty;
-        private string _addressBarText = string.Empty;
-        private string _statusText = "Готово";
-        private bool _isLoading;
-        private FileSystemEntry? _selectedEntry;
-        private SidebarTreeItem? _selectedSidebarItem;
-        private string _sortColumn = "Name";
-        private ListSortDirection _sortDirection = ListSortDirection.Ascending;
-        private string _searchText = string.Empty;
-        private string? _editingEntryFullPath;
-        private string? _pendingRenameText;
-        private bool _isSearchEmpty;
+        private TabViewModel? _selectedTab;
+        public TabViewModel? SelectedTab
+        {
+            get => _selectedTab;
+            set
+            {
+                if (_selectedTab == value) return;
+                if (_selectedTab != null)
+                {
+                    _selectedTab.CancelFolderSizing();
+                    _selectedTab.IsSelected = false;
+                    _selectedTab.PropertyChanged -= OnSelectedTabPropertyChanged;
+                }
+                _selectedTab = value;
+                if (_selectedTab != null)
+                {
+                    _selectedTab.IsSelected = true;
+                    _selectedTab.PropertyChanged += OnSelectedTabPropertyChanged;
+                }
+                OnPropertyChanged();
+                OnSelectedTabChanged();
+            }
+        }
+
+        private void OnSelectedTabChanged()
+        {
+            OnPropertyChanged(nameof(CurrentPath));
+            OnPropertyChanged(nameof(AddressBarText));
+            OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(IsLoading));
+            OnPropertyChanged(nameof(SearchText));
+            OnPropertyChanged(nameof(IsSearchActive));
+            OnPropertyChanged(nameof(IsSearchEmpty));
+            OnPropertyChanged(nameof(CanAddToFavorites));
+            OnPropertyChanged(nameof(EditingEntryFullPath));
+            OnPropertyChanged(nameof(PendingRenameText));
+            OnPropertyChanged(nameof(CurrentSearchScope));
+            OnPropertyChanged(nameof(SearchScopeIcon));
+            OnPropertyChanged(nameof(SearchScopeTooltip));
+            OnPropertyChanged(nameof(SelectedEntry));
+            OnPropertyChanged(nameof(Entries));
+            OnPropertyChanged(nameof(EntriesView));
+
+            SelectedTab?.ScheduleFolderSizing();
+
+            NavigateBackCommand.RaiseCanExecuteChanged();
+            NavigateForwardCommand.RaiseCanExecuteChanged();
+            NavigateUpCommand.RaiseCanExecuteChanged();
+            RefreshCommand.RaiseCanExecuteChanged();
+            CreateFolderCommand.RaiseCanExecuteChanged();
+            CreateFileCommand.RaiseCanExecuteChanged();
+            DeleteEntryCommand.RaiseCanExecuteChanged();
+            RenameEntryCommand.RaiseCanExecuteChanged();
+            AddToFavoritesCommand.RaiseCanExecuteChanged();
+        }
+
+        private void OnSelectedTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            OnPropertyChanged(e.PropertyName);
+
+            if (e.PropertyName == nameof(TabViewModel.SelectedEntry))
+            {
+                OnPropertyChanged(nameof(CanAddToFavorites));
+            }
+            else if (e.PropertyName == nameof(TabViewModel.CurrentPath))
+            {
+                UpdateSidebarSelection();
+                SelectedTab?.ScheduleFolderSizing();
+            }
+        }
+
+        // ===== Forwarded properties =====
+
+        public string CurrentPath => SelectedTab?.CurrentPath ?? string.Empty;
+        public string AddressBarText
+        {
+            get => SelectedTab?.AddressBarText ?? string.Empty;
+            set { if (SelectedTab != null) SelectedTab.AddressBarText = value; }
+        }
+        public string StatusText => SelectedTab?.StatusText ?? "Готово";
+        public bool IsLoading => SelectedTab?.IsLoading ?? false;
+        public string SearchText
+        {
+            get => SelectedTab?.SearchText ?? string.Empty;
+            set { if (SelectedTab != null) SelectedTab.SearchText = value; }
+        }
+        public bool IsSearchActive => SelectedTab?.IsSearchActive ?? false;
+        public bool IsSearchEmpty => SelectedTab?.IsSearchEmpty ?? false;
+        public string? EditingEntryFullPath => SelectedTab?.EditingEntryFullPath;
+        public string? PendingRenameText
+        {
+            get => SelectedTab?.PendingRenameText;
+            set { if (SelectedTab != null) SelectedTab.PendingRenameText = value; }
+        }
+        public SearchScope CurrentSearchScope => SelectedTab?.CurrentSearchScope ?? SearchScope.CurrentFolder;
+        public string SearchScopeIcon => SelectedTab?.SearchScopeIcon ?? "📁";
+        public string SearchScopeTooltip => SelectedTab?.SearchScopeTooltip ?? "Поиск в текущей папке";
+        public FileSystemEntry? SelectedEntry
+        {
+            get => SelectedTab?.SelectedEntry;
+            set { if (SelectedTab != null) SelectedTab.SelectedEntry = value; }
+        }
+        public ObservableCollection<FileSystemEntry> Entries => SelectedTab?.Entries ?? new();
+        public ICollectionView EntriesView => SelectedTab?.EntriesView ?? CollectionViewSource.GetDefaultView(new ObservableCollection<FileSystemEntry>());
+
+        // ===== UI State (global) =====
+
         private bool _isDrivePanelVisible = true;
 
         public bool IsDrivePanelVisible
@@ -61,134 +145,9 @@ namespace FastExplorer.ViewModels
             ? "Скрыть панель дисков"
             : "Показать панель дисков";
 
-        public string? EditingEntryFullPath
-        {
-            get => _editingEntryFullPath;
-            set => SetField(ref _editingEntryFullPath, value);
-        }
-
-        public string? PendingRenameText
-        {
-            get => _pendingRenameText;
-            set => SetField(ref _pendingRenameText, value);
-        }
-
-        public ObservableCollection<FileSystemEntry> Entries { get; } = new();
         public ObservableCollection<SidebarTreeItem> SidebarItems { get; } = new();
 
-        public ICollectionView EntriesView { get; }
-
-        public string CurrentPath
-        {
-            get => _currentPath;
-            private set => SetField(ref _currentPath, value);
-        }
-
-        public string AddressBarText
-        {
-            get => _addressBarText;
-            set => SetField(ref _addressBarText, value);
-        }
-
-        public string StatusText
-        {
-            get => _statusText;
-            private set => SetField(ref _statusText, value);
-        }
-
-        public bool IsLoading
-        {
-            get => _isLoading;
-            private set => SetField(ref _isLoading, value);
-        }
-
-        public string SearchText
-        {
-            get => _searchText;
-            set
-            {
-                if (SetField(ref _searchText, value))
-                {
-                    if (_searchScope == SearchScope.CurrentFolder)
-                    {
-                        EntriesView.Refresh();
-                        UpdateStatusAfterFilter();
-                    }
-                    else
-                    {
-                        var roots = DriveInfo.GetDrives()
-                            .Where(d => d.IsReady)
-                            .Select(d => d.RootDirectory.FullName)
-                            .ToList();
-                        _ = RunRecursiveSearchAsync(roots, value);
-                    }
-                    OnPropertyChanged(nameof(IsSearchActive));
-                }
-            }
-        }
-
-        public bool IsSearchActive => !string.IsNullOrEmpty(_searchText);
-
-        public bool IsSearchEmpty
-        {
-            get => _isSearchEmpty;
-            private set => SetField(ref _isSearchEmpty, value);
-        }
-
-        public SearchScope CurrentSearchScope
-        {
-            get => _searchScope;
-            set
-            {
-                if (SetField(ref _searchScope, value))
-                {
-                    OnPropertyChanged(nameof(SearchScopeIcon));
-                    OnPropertyChanged(nameof(SearchScopeTooltip));
-
-                    _recursiveSearchCts?.Cancel();
-
-                    if (value == SearchScope.AllSubfolders)
-                    {
-                        if (IsSearchActive)
-                        {
-                            var roots = DriveInfo.GetDrives()
-                                .Where(d => d.IsReady)
-                                .Select(d => d.RootDirectory.FullName)
-                                .ToList();
-                            _ = RunRecursiveSearchAsync(roots, _searchText);
-                        }
-                    }
-                    else if (IsSearchActive)
-                    {
-                        _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
-                    }
-                }
-            }
-        }
-
-        public string SearchScopeIcon => _searchScope == SearchScope.CurrentFolder ? "📁" : "🌐";
-
-        public string SearchScopeTooltip => _searchScope == SearchScope.CurrentFolder
-            ? "Поиск в текущей папке"
-            : "Поиск во всех подпапках";
-
-        public FileSystemEntry? SelectedEntry
-        {
-            get => _selectedEntry;
-            set
-            {
-                if (SetField(ref _selectedEntry, value))
-                {
-                    OnPropertyChanged(nameof(CanAddToFavorites));
-                }
-            }
-        }
-
-        public SidebarTreeItem? SelectedSidebarItem
-        {
-            get => _selectedSidebarItem;
-            set => SetField(ref _selectedSidebarItem, value);
-        }
+        // ===== Forwarded Commands =====
 
         public RelayCommand NavigateBackCommand { get; }
         public RelayCommand NavigateForwardCommand { get; }
@@ -209,49 +168,165 @@ namespace FastExplorer.ViewModels
         public RelayCommand AddToFavoritesCommand { get; }
         public RelayCommand RemoveFromFavoritesCommand { get; }
 
-        public bool CanAddToFavorites =>
-            SelectedEntry is { IsDirectory: true } &&
-            !_favoritesService.Contains(SelectedEntry.FullPath);
+        // ===== Tab Management Commands =====
+
+        public RelayCommand AddTabCommand { get; }
+        public RelayCommand CloseTabCommand { get; }
 
         public MainViewModel()
         {
-            EntriesView = CollectionViewSource.GetDefaultView(Entries);
-            EntriesView.SortDescriptions.Add(new SortDescription(nameof(FileSystemEntry.IsDirectory), ListSortDirection.Descending));
-            EntriesView.SortDescriptions.Add(new SortDescription(_sortColumn, _sortDirection));
-            EntriesView.Filter = FilterPredicate;
+            NavigateBackCommand = new RelayCommand(
+                _ => SelectedTab?.NavigateBack(),
+                _ => SelectedTab?.BackStackCount > 0);
 
-            NavigateBackCommand = new RelayCommand(_ => NavigateBack(), _ => _backStack.Count > 0);
-            NavigateForwardCommand = new RelayCommand(_ => NavigateForward(), _ => _forwardStack.Count > 0);
-            NavigateUpCommand = new RelayCommand(_ => NavigateUp(), _ => CanNavigateUp());
-            RefreshCommand = new RelayCommand(_ => _ = LoadDirectoryAsync(CurrentPath, pushHistory: false));
-            GoToAddressCommand = new RelayCommand(_ => _ = NavigateToAddressBarAsync());
-            OpenEntryCommand = new RelayCommand(param => OpenEntry(param as FileSystemEntry));
-            SortByColumnCommand = new RelayCommand(param => SortByColumn(param as string));
-            ClearSearchCommand = new RelayCommand(_ => ClearSearch());
-            ToggleSearchScopeCommand = new RelayCommand(_ => ToggleSearchScope());
+            NavigateForwardCommand = new RelayCommand(
+                _ => SelectedTab?.NavigateForward(),
+                _ => SelectedTab?.ForwardStackCount > 0);
 
-            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath));
-            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath));
-            DeleteEntryCommand = new RelayCommand(_ => DeleteSelectedEntry(), _ => SelectedEntry != null);
-            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null);
-            CommitRenameCommand = new RelayCommand(_ => CommitRename());
-            CancelRenameCommand = new RelayCommand(_ => CancelRename());
-            ToggleDrivePanelCommand = new RelayCommand(_ => IsDrivePanelVisible = !IsDrivePanelVisible);
-            AddToFavoritesCommand = new RelayCommand(_ => AddCurrentToFavorites(), _ => CanAddToFavorites);
-            RemoveFromFavoritesCommand = new RelayCommand(param => RemoveFromFavorites(param as SidebarTreeItem));
+            NavigateUpCommand = new RelayCommand(
+                _ => SelectedTab?.NavigateUp(),
+                _ => SelectedTab?.CanNavigateUp() ?? false);
+
+            RefreshCommand = new RelayCommand(
+                _ => { if (SelectedTab != null) _ = SelectedTab.LoadDirectoryAsync(SelectedTab.CurrentPath, pushHistory: false); },
+                _ => SelectedTab != null);
+
+            GoToAddressCommand = new RelayCommand(
+                _ => SelectedTab?.GoToAddressCommand.Execute(null));
+
+            OpenEntryCommand = new RelayCommand(
+                param => SelectedTab?.OpenEntryCommand.Execute(param));
+
+            SortByColumnCommand = new RelayCommand(
+                param => SelectedTab?.SortByColumnCommand.Execute(param));
+
+            ClearSearchCommand = new RelayCommand(
+                _ => SelectedTab?.ClearSearchCommand.Execute(null));
+
+            ToggleSearchScopeCommand = new RelayCommand(
+                _ => SelectedTab?.ToggleSearchScopeCommand.Execute(null));
+
+            CreateFolderCommand = new RelayCommand(
+                _ => SelectedTab?.CreateFolderCommand.Execute(null),
+                _ => SelectedTab?.CreateFolderCommand.CanExecute(null) ?? false);
+
+            CreateFileCommand = new RelayCommand(
+                _ => SelectedTab?.CreateFileCommand.Execute(null),
+                _ => SelectedTab?.CreateFileCommand.CanExecute(null) ?? false);
+
+            DeleteEntryCommand = new RelayCommand(
+                _ => SelectedTab?.DeleteEntryCommand.Execute(null),
+                _ => SelectedTab?.DeleteEntryCommand.CanExecute(null) ?? false);
+
+            RenameEntryCommand = new RelayCommand(
+                _ => SelectedTab?.RenameEntryCommand.Execute(null),
+                _ => SelectedTab?.RenameEntryCommand.CanExecute(null) ?? false);
+
+            CommitRenameCommand = new RelayCommand(
+                _ => SelectedTab?.CommitRenameCommand.Execute(null));
+
+            CancelRenameCommand = new RelayCommand(
+                _ => SelectedTab?.CancelRenameCommand.Execute(null));
+
+            ToggleDrivePanelCommand = new RelayCommand(
+                _ => IsDrivePanelVisible = !IsDrivePanelVisible);
+
+            AddToFavoritesCommand = new RelayCommand(
+                _ => AddCurrentToFavorites(),
+                _ => CanAddToFavorites);
+
+            RemoveFromFavoritesCommand = new RelayCommand(
+                param => RemoveFromFavorites(param as SidebarTreeItem));
+
+            AddTabCommand = new RelayCommand(_ => AddTab());
+            CloseTabCommand = new RelayCommand(param => CloseTab(param as TabViewModel));
 
             LoadSidebarItems();
 
-            var startPath = @"C:\";
-            _ = LoadDirectoryAsync(startPath, pushHistory: false);
+            AddTab();
+        }
 
-            var drivesSection = SidebarItems.FirstOrDefault();
-            if (drivesSection != null)
+        public bool CanAddToFavorites
+        {
+            get
             {
-                var cDrive = drivesSection.Children.FirstOrDefault(c =>
-                    string.Equals(c.Path, startPath, StringComparison.OrdinalIgnoreCase));
-                if (cDrive != null)
-                    cDrive.IsSelected = true;
+                var entry = SelectedTab?.SelectedEntry;
+                return entry is { IsDirectory: true } &&
+                       !_favoritesService.Contains(entry.FullPath);
+            }
+        }
+
+        // ===== Tab Management =====
+
+        public void AddTab()
+        {
+            AddTabAt(Tabs.Count);
+        }
+
+        public void AddTabAt(int index)
+        {
+            var startPath = @"C:\";
+            var tab = new TabViewModel(_reader, _operationService, startPath);
+            Tabs.Insert(index, tab);
+            SelectedTab = tab;
+            UpdateSidebarSelection();
+        }
+
+        public void CloseTab(TabViewModel? tab)
+        {
+            if (tab == null) return;
+            if (Tabs.Count == 1)
+            {
+                Application.Current.Shutdown();
+                return;
+            }
+
+            var oldIndex = Tabs.IndexOf(tab);
+
+            tab.PropertyChanged -= OnSelectedTabPropertyChanged;
+            Tabs.Remove(tab);
+
+            if (tab == _selectedTab)
+            {
+                var newIndex = Math.Min(oldIndex, Tabs.Count - 1);
+                SelectedTab = Tabs[newIndex];
+            }
+        }
+
+        public void SelectTab(TabViewModel tab)
+        {
+            SelectedTab = tab;
+            UpdateSidebarSelection();
+        }
+
+        // ===== Sidebar =====
+
+        public void NavigateToSidebarItem(SidebarTreeItem? item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Path)) return;
+            if (item.ItemType == SidebarItemType.Drive && !item.IsReady) return;
+            _ = SelectedTab?.LoadDirectoryAsync(item.Path, pushHistory: true);
+        }
+
+        private void UpdateSidebarSelection()
+        {
+            if (SelectedTab == null) return;
+            var path = SelectedTab.CurrentPath;
+            if (string.IsNullOrEmpty(path)) return;
+
+            foreach (var section in SidebarItems)
+            {
+                foreach (var child in section.Children)
+                {
+                    if (string.Equals(child.Path, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        child.IsSelected = true;
+                    }
+                    else
+                    {
+                        child.IsSelected = false;
+                    }
+                }
             }
         }
 
@@ -349,7 +424,7 @@ namespace FastExplorer.ViewModels
 
         private void AddCurrentToFavorites()
         {
-            var entry = SelectedEntry;
+            var entry = SelectedTab?.SelectedEntry;
             if (entry == null || !entry.IsDirectory) return;
             _favoritesService.Add(entry.FullPath);
             RebuildFavoritesSection();
@@ -383,559 +458,6 @@ namespace FastExplorer.ViewModels
                     IsFavorite = true
                 });
             }
-        }
-
-        public void NavigateToSidebarItem(SidebarTreeItem? item)
-        {
-            if (item == null || string.IsNullOrEmpty(item.Path)) return;
-            if (item.ItemType == SidebarItemType.Drive && !item.IsReady) return;
-            _ = LoadDirectoryAsync(item.Path, pushHistory: true);
-        }
-
-        public async Task LoadDirectoryAsync(string path, bool pushHistory)
-        {
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            {
-                StatusText = "Путь не найден";
-                return;
-            }
-
-            _recursiveSearchCts?.Cancel();
-            _sizingCts?.Cancel();
-            _loadCts?.Cancel();
-            _loadCts = new CancellationTokenSource();
-            var token = _loadCts.Token;
-
-            if (_searchScope != SearchScope.CurrentFolder && 
-                !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
-            {
-                _searchScope = SearchScope.CurrentFolder;
-                OnPropertyChanged(nameof(CurrentSearchScope));
-                OnPropertyChanged(nameof(SearchScopeIcon));
-                OnPropertyChanged(nameof(SearchScopeTooltip));
-            }
-
-            IsLoading = true;
-            StatusText = "Загрузка...";
-
-            try
-            {
-                var result = await _reader.ReadDirectoryAsync(path, token);
-
-                if (token.IsCancellationRequested) return;
-
-                if (pushHistory && !string.IsNullOrEmpty(CurrentPath) && CurrentPath != path)
-                {
-                    _backStack.Add(CurrentPath);
-                    _forwardStack.Clear();
-                }
-
-                Entries.Clear();
-                foreach (var dir in result.Directories) Entries.Add(dir);
-                foreach (var file in result.Files) Entries.Add(file);
-
-                _ = StartFolderSizingAsync();
-
-                CurrentPath = path;
-                AddressBarText = path;
-                UpdateStatusAfterFilter();
-
-                NavigateBackCommand.RaiseCanExecuteChanged();
-                NavigateForwardCommand.RaiseCanExecuteChanged();
-                NavigateUpCommand.RaiseCanExecuteChanged();
-            }
-            catch (OperationCanceledException)
-            {
-                // Навигация была прервана более новым запросом — это нормально
-            }
-            catch (UnauthorizedAccessException)
-            {
-                StatusText = "Нет доступа к папке";
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"Ошибка: {ex.Message}";
-            }
-            finally
-            {
-                if (!token.IsCancellationRequested)
-                    IsLoading = false;
-            }
-        }
-
-        private void NavigateBack()
-        {
-            if (_backStack.Count == 0) return;
-            var target = _backStack[^1];
-            _backStack.RemoveAt(_backStack.Count - 1);
-            _forwardStack.Add(CurrentPath);
-            _ = LoadDirectoryAsync(target, pushHistory: false);
-        }
-
-        private void NavigateForward()
-        {
-            if (_forwardStack.Count == 0) return;
-            var target = _forwardStack[^1];
-            _forwardStack.RemoveAt(_forwardStack.Count - 1);
-            _backStack.Add(CurrentPath);
-            _ = LoadDirectoryAsync(target, pushHistory: false);
-        }
-
-        private bool CanNavigateUp()
-        {
-            if (string.IsNullOrEmpty(CurrentPath)) return false;
-            var parent = Directory.GetParent(CurrentPath);
-            return parent != null;
-        }
-
-        private void NavigateUp()
-        {
-            var parent = Directory.GetParent(CurrentPath);
-            if (parent != null)
-                _ = LoadDirectoryAsync(parent.FullName, pushHistory: true);
-        }
-
-        private async Task NavigateToAddressBarAsync()
-        {
-            await LoadDirectoryAsync(AddressBarText, pushHistory: true);
-        }
-
-        private void OpenEntry(FileSystemEntry? entry)
-        {
-            if (entry == null) return;
-
-            if (entry.IsDirectory)
-            {
-                _ = LoadDirectoryAsync(entry.FullPath, pushHistory: true);
-            }
-            else
-            {
-                try
-                {
-                    var psi = new System.Diagnostics.ProcessStartInfo(entry.FullPath)
-                    {
-                        UseShellExecute = true
-                    };
-                    System.Diagnostics.Process.Start(psi);
-                }
-                catch (Exception ex)
-                {
-                    StatusText = $"Не удалось открыть файл: {ex.Message}";
-                }
-            }
-        }
-
-        private bool FilterPredicate(object obj)
-        {
-            if (string.IsNullOrEmpty(_searchText))
-                return true;
-            if (obj is FileSystemEntry entry)
-                return entry.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
-            return true;
-        }
-
-        private void ClearSearch()
-        {
-            SearchText = string.Empty;
-        }
-
-        private void CreateNewFolder()
-        {
-            var baseName = "Новая папка";
-            var path = _operationService.CreateDirectory(CurrentPath, baseName);
-            var dirInfo = new DirectoryInfo(path);
-            var entry = FileSystemEntry.FromDirectory(dirInfo);
-            Entries.Add(entry);
-            SelectedEntry = entry;
-            StartRename();
-        }
-
-        private void CreateNewFile()
-        {
-            var baseName = "Новый файл.txt";
-            var path = _operationService.CreateFile(CurrentPath, baseName);
-            var fileInfo = new FileInfo(path);
-            var entry = FileSystemEntry.FromFile(fileInfo);
-            Entries.Add(entry);
-            SelectedEntry = entry;
-            StartRename();
-        }
-
-        private void DeleteSelectedEntry()
-        {
-            var entry = SelectedEntry;
-            if (entry == null) return;
-
-            var type = entry.IsDirectory ? "папку" : "файл";
-            var message = $"Вы уверены, что хотите удалить {type} \"{entry.Name}\"?\nОн будет перемещён в корзину.";
-            var dialog = new ConfirmDeleteDialog(message);
-            dialog.ShowDialog();
-
-            if (!dialog.Confirmed) return;
-
-            var success = _operationService.DeleteToRecycleBin(entry.FullPath, entry.IsDirectory);
-            if (success)
-            {
-                Entries.Remove(entry);
-                StatusText = $"Удалено: {entry.Name}";
-            }
-            else
-            {
-                StatusText = "Не удалось удалить элемент";
-            }
-        }
-
-        private void StartRename()
-        {
-            var entry = SelectedEntry;
-            if (entry == null) return;
-
-            EditingEntryFullPath = entry.FullPath;
-            PendingRenameText = entry.Name;
-        }
-
-        private void CommitRename()
-        {
-            if (EditingEntryFullPath == null) return;
-
-            var newName = PendingRenameText;
-            if (string.IsNullOrWhiteSpace(newName))
-            {
-                CancelRename();
-                return;
-            }
-
-            var entry = Entries.FirstOrDefault(e =>
-                string.Equals(e.FullPath, EditingEntryFullPath, StringComparison.OrdinalIgnoreCase));
-            if (entry == null)
-            {
-                EditingEntryFullPath = null;
-                return;
-            }
-
-            var success = _operationService.Rename(EditingEntryFullPath, newName, entry.IsDirectory);
-            EditingEntryFullPath = null;
-            PendingRenameText = null;
-
-            if (success)
-            {
-                _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
-            }
-            else
-            {
-                StatusText = "Не удалось переименовать";
-            }
-        }
-
-        private void CancelRename()
-        {
-            EditingEntryFullPath = null;
-            PendingRenameText = null;
-        }
-
-        private void ToggleSearchScope()
-        {
-            CurrentSearchScope = _searchScope == SearchScope.CurrentFolder
-                ? SearchScope.AllSubfolders
-                : SearchScope.CurrentFolder;
-        }
-
-        private static readonly HashSet<string> SkippedDirNames = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "windows", "windows.old",
-            "program files", "program files (x86)",
-            "programdata",
-            "$recycle.bin",
-            "system volume information",
-            "recovery",
-            "winsxs",
-            "installer",
-            "assembly",
-            "nativeimages",
-            "servicepackfiles",
-            "config.msi",
-            "msocache",
-            "$winreagent",
-            "windowsapps",
-            "$getcurrent",
-            "$windows.~bt",
-            "$windows.~ws"
-        };
-
-        private async Task RunRecursiveSearchAsync(IEnumerable<string> rootPaths, string searchText)
-        {
-            _recursiveSearchCts?.Cancel();
-            _recursiveSearchCts = new CancellationTokenSource();
-            var token = _recursiveSearchCts.Token;
-
-            if (string.IsNullOrWhiteSpace(searchText))
-            {
-                await LoadDirectoryAsync(CurrentPath, pushHistory: false);
-                return;
-            }
-
-            var roots = rootPaths as IReadOnlyList<string> ?? rootPaths.ToList();
-            if (roots.Count == 0)
-            {
-                StatusText = "Нет доступных дисков";
-                return;
-            }
-
-            IsLoading = true;
-            StatusText = "Поиск...";
-            Entries.Clear();
-
-            int totalFound = 0;
-            var batch = new List<FileSystemEntry>();
-            var batchLock = new object();
-
-            await Task.Run(() =>
-            {
-                try
-                {
-                    Parallel.ForEach(roots, new ParallelOptions
-                    {
-                        CancellationToken = token,
-                        MaxDegreeOfParallelism = Math.Min(roots.Count, 4)
-                    }, root =>
-                    {
-                        var stack = new Stack<string>();
-                        stack.Push(root);
-
-                        while (stack.Count > 0)
-                        {
-                            if (token.IsCancellationRequested) return;
-
-                            var currentDir = stack.Pop();
-
-                            var leafName = Path.GetFileName(currentDir);
-                            if (!string.IsNullOrEmpty(leafName) && SkippedDirNames.Contains(leafName))
-                                continue;
-
-                            string[] subDirs;
-                            string[] files;
-
-                            try
-                            {
-                                subDirs = Directory.GetDirectories(currentDir);
-                            }
-                            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
-                            {
-                                subDirs = Array.Empty<string>();
-                            }
-
-                            try
-                            {
-                                files = Directory.GetFiles(currentDir);
-                            }
-                            catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
-                            {
-                                files = Array.Empty<string>();
-                            }
-
-                            foreach (var subDir in subDirs)
-                            {
-                                if (token.IsCancellationRequested) return;
-                                stack.Push(subDir);
-
-                                try
-                                {
-                                    var dirName = Path.GetFileName(subDir);
-                                    if (!dirName.Contains(searchText, StringComparison.OrdinalIgnoreCase))
-                                        continue;
-
-                                    var dirInfo = new DirectoryInfo(subDir);
-                                    var relPath = Path.GetDirectoryName(subDir)!.TrimEnd('\\');
-
-                                    lock (batchLock)
-                                    {
-                                        batch.Add(new FileSystemEntry
-                                        {
-                                            Name = dirName,
-                                            FullPath = subDir,
-                                            IsDirectory = true,
-                                            Modified = FileSystemEntry.SafeGetLastWrite(dirInfo),
-                                            RelativePath = relPath
-                                        });
-                                        totalFound++;
-
-                                        if (batch.Count >= 100)
-                                        {
-                                            var copy = batch.ToList();
-                                            batch.Clear();
-                                            var captured = totalFound;
-
-                                            Application.Current.Dispatcher.InvokeAsync(() =>
-                                            {
-                                                foreach (var e in copy) Entries.Add(e);
-                                                StatusText = $"Найдено: {captured}";
-                                            }, System.Windows.Threading.DispatcherPriority.Background);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
-                                {
-                                    // skip inaccessible entries
-                                }
-                            }
-
-                            foreach (var file in files)
-                            {
-                                if (token.IsCancellationRequested) return;
-
-                                try
-                                {
-                                    var fileName = Path.GetFileName(file);
-                                    if (!fileName.Contains(searchText, StringComparison.OrdinalIgnoreCase))
-                                        continue;
-
-                                    var fileInfo = new FileInfo(file);
-                                    var relPath = Path.GetDirectoryName(file)!.TrimEnd('\\');
-
-                                    lock (batchLock)
-                                    {
-                                        batch.Add(new FileSystemEntry
-                                        {
-                                            Name = fileName,
-                                            FullPath = file,
-                                            IsDirectory = false,
-                                            SizeBytes = FileSystemEntry.SafeGetLength(fileInfo),
-                                            Modified = FileSystemEntry.SafeGetLastWrite(fileInfo),
-                                            Extension = fileInfo.Extension,
-                                            RelativePath = relPath
-                                        });
-                                        totalFound++;
-
-                                        if (batch.Count >= 100)
-                                        {
-                                            var copy = batch.ToList();
-                                            batch.Clear();
-                                            var captured = totalFound;
-
-                                            Application.Current.Dispatcher.InvokeAsync(() =>
-                                            {
-                                                foreach (var e in copy) Entries.Add(e);
-                                                StatusText = $"Найдено: {captured}";
-                                            }, System.Windows.Threading.DispatcherPriority.Background);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or PathTooLongException or IOException)
-                                {
-                                    // skip inaccessible entries
-                                }
-                            }
-                        }
-                    });
-                }
-                catch (OperationCanceledException) { }
-                catch (AggregateException ae) when (token.IsCancellationRequested)
-                {
-                    ae.Handle(ex => ex is OperationCanceledException);
-                }
-            }, token);
-
-            if (token.IsCancellationRequested) return;
-
-            // Flush remaining batch
-            List<FileSystemEntry> remaining;
-            lock (batchLock)
-            {
-                remaining = batch.ToList();
-                totalFound += remaining.Count;
-                batch.Clear();
-            }
-
-            if (remaining.Count > 0)
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    foreach (var e in remaining) Entries.Add(e);
-                }, System.Windows.Threading.DispatcherPriority.Background);
-            }
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                EntriesView.Refresh();
-                IsSearchEmpty = totalFound == 0;
-                StatusText = totalFound > 0
-                    ? $"Найдено: {totalFound}"
-                    : "Ничего не найдено";
-                IsLoading = false;
-            });
-        }
-
-        private void UpdateStatusAfterFilter()
-        {
-            if (string.IsNullOrEmpty(_searchText))
-            {
-                StatusText = $"Элементов: {Entries.Count}";
-                IsSearchEmpty = false;
-            }
-            else
-            {
-                var count = EntriesView.Cast<object>().Count();
-                StatusText = $"Найдено: {count} из {Entries.Count}";
-                IsSearchEmpty = count == 0;
-            }
-        }
-
-        private async Task StartFolderSizingAsync()
-        {
-            _sizingCts?.Cancel();
-            _sizingCts = new CancellationTokenSource();
-            var token = _sizingCts.Token;
-
-            var dirs = Entries.Where(e => e.IsDirectory).ToList();
-            if (dirs.Count == 0) return;
-
-            var semaphore = new SemaphoreSlim(3);
-
-            var tasks = dirs.Select(async entry =>
-            {
-                await semaphore.WaitAsync(token);
-                try
-                {
-                    var size = await DirectoryReaderService.CalculateFolderSizeAsync(entry.FullPath, token);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        entry.SizeBytes = size;
-                    }, System.Windows.Threading.DispatcherPriority.Background);
-                }
-                catch (OperationCanceledException) { }
-                catch (Exception)
-                {
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        if (entry.SizeBytes < 0) entry.SizeBytes = 0;
-                    }, System.Windows.Threading.DispatcherPriority.Background);
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
-
-            try
-            {
-                await Task.WhenAll(tasks);
-            }
-            catch (OperationCanceledException) { }
-        }
-
-        private void SortByColumn(string? columnName)
-        {
-            if (string.IsNullOrEmpty(columnName)) return;
-
-            _sortDirection = (_sortColumn == columnName && _sortDirection == ListSortDirection.Ascending)
-                ? ListSortDirection.Descending
-                : ListSortDirection.Ascending;
-
-            _sortColumn = columnName;
-
-            EntriesView.SortDescriptions.Clear();
-            EntriesView.SortDescriptions.Add(new SortDescription(nameof(FileSystemEntry.IsDirectory), ListSortDirection.Descending));
-            EntriesView.SortDescriptions.Add(new SortDescription(_sortColumn, _sortDirection));
         }
     }
 }

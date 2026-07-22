@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace FastExplorer.Converters
+namespace Fylo.Converters
 {
     public sealed class BoolToVisibilityConverter : IValueConverter
     {

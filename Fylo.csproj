@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>FastExplorer</RootNamespace>
-    <AssemblyName>FastExplorer</AssemblyName>
+    <RootNamespace>Fylo</RootNamespace>
+    <AssemblyName>Fylo</AssemblyName>
 
     <!-- Производительность и легковесность -->
     <PublishReadyToRun>true</PublishReadyToRun>
