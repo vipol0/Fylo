@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:Fylo.Converters"
              xmlns:models="clr-namespace:Fylo.Models"
-             StartupUri="MainWindow.xaml">
+             >
     <Application.Resources>
 
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1E1F22"/>

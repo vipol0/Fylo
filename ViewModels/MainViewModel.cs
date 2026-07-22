@@ -18,6 +18,7 @@ namespace Fylo.ViewModels
         private readonly DirectoryReaderService _reader = new();
         private readonly FileSystemOperationService _operationService = new();
         private readonly RecycleBinService _recycleBinService = new();
+        private readonly string? _startPath;
 
         public ObservableCollection<TabViewModel> Tabs { get; } = new();
 
@@ -187,8 +188,9 @@ namespace Fylo.ViewModels
         public RelayCommand AddTabCommand { get; }
         public RelayCommand CloseTabCommand { get; }
 
-        public MainViewModel()
+        public MainViewModel(string? startPath = null)
         {
+            _startPath = startPath;
             NavigateBackCommand = new RelayCommand(
                 _ => SelectedTab?.NavigateBack(),
                 _ => SelectedTab?.BackStackCount > 0);
@@ -316,8 +318,8 @@ namespace Fylo.ViewModels
 
         public void AddTabAt(int index)
         {
-            var startPath = @"C:\";
-            var tab = new TabViewModel(_reader, _operationService, startPath);
+            var path = _startPath ?? @"C:\";
+            var tab = new TabViewModel(_reader, _operationService, path);
             Tabs.Insert(index, tab);
             SelectedTab = tab;
             UpdateSidebarSelection();

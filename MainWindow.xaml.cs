@@ -23,11 +23,11 @@ namespace Fylo
         private bool _isDraggingTab;
         private TabViewModel? _dragTabViewModel;
 
-        public MainWindow()
+        public MainWindow(string startPath)
         {
             InitializeComponent();
             Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Fylo.ico"));
-            ViewModel = new MainViewModel();
+            ViewModel = new MainViewModel(startPath);
             DataContext = ViewModel;
 
             Closed += (_, _) => ViewModel.SaveFavorites();

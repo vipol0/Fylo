@@ -1,17 +1,34 @@
+# Build
 bin/
 obj/
+*.exe
+*.dll
+*.pdb
+*.nupkg
+Fylo-Setup.exe
+
+# IDE & Editors
+.vs/
+.idea/
+.vscode/
 *.user
 *.suo
-.vs/
 *.userosscache
 *.sln.docstates
 *.DotSettings*
 _ReSharper*/
-*.nupkg
-[Tt]est[Rr]esult*/
-*.trx
-.idea/
 *.sln.iml
-.vscode/
 *.snk
 *.pfx
+
+# Tests
+[Tt]est[Rr]esult*/
+*.trx
+
+# OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Logs
+*.log
