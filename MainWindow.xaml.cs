@@ -96,8 +96,6 @@ namespace Fylo
             }
         }
 
-        // ========== ТАБ-БАР (оконные операции) ==========
-
         private void TabBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2)
@@ -136,8 +134,6 @@ namespace Fylo
             var point = PointToScreen(e.GetPosition(this));
             SystemCommands.ShowSystemMenu(this, point);
         }
-
-        // ========== ОБРАБОТЧИКИ ВКЛАДОК ==========
 
         private void TabItem_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -247,8 +243,6 @@ namespace Fylo
             SystemCommands.CloseWindow(this);
         }
 
-        // ========== Файловый список ==========
-
         private void FilesListView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             var pos = Mouse.GetPosition(FilesListView);
@@ -292,8 +286,6 @@ namespace Fylo
                 scrollViewer.LineRight();
         }
 
-        // ========== ViewModel PropertyChanged ==========
-
         private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(MainViewModel.EditingEntryFullPath) && ViewModel.EditingEntryFullPath != null)
@@ -328,8 +320,6 @@ namespace Fylo
                 }
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
-
-        // ========== Утилиты ==========
 
         private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
@@ -378,8 +368,6 @@ namespace Fylo
                 e.Handled = true;
             }
         }
-
-        // ========== Панель дисков (анимация) ==========
 
         private void SyncIconState()
         {
@@ -485,8 +473,6 @@ namespace Fylo
             ShowPanelIcon.BeginAnimation(UIElement.OpacityProperty,
                 new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150)));
         }
-
-        // ========== Оконные операции ==========
 
         private void UpdateMaximizeRestoreIcons()
         {

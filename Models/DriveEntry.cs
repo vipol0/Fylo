@@ -1,8 +1,5 @@
 namespace Fylo.Models
 {
-    /// <summary>
-    /// Лёгкая модель диска для боковой панели.
-    /// </summary>
     public sealed class DriveEntry
     {
         public string RootPath { get; init; } = string.Empty;
@@ -12,7 +9,6 @@ namespace Fylo.Models
         public long FreeSizeBytes { get; init; }
         public bool IsReady { get; init; }
 
-        /// <summary>Доля занятого места 0..1, для мини-индикатора заполненности.</summary>
         public double UsedFraction => TotalSizeBytes > 0
             ? 1.0 - (double)FreeSizeBytes / TotalSizeBytes
             : 0;

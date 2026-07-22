@@ -41,7 +41,7 @@ namespace Fylo.ViewModels
         private string _currentPath = string.Empty;
         private string _addressBarText = string.Empty;
         private string _statusText = "Готово";
-        private string _displayName = "Fast Explorer";
+        private string _displayName = "Fylo";
         private bool _isLoading;
         private FileSystemEntry? _selectedEntry;
         private string _sortColumn = "Name";
@@ -122,7 +122,17 @@ namespace Fylo.ViewModels
             {
                 if (SetField(ref _searchText, value))
                 {
-                    if (_searchScope == SearchScope.CurrentFolder)
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        _recursiveSearchCts?.Cancel();
+                        if (_searchScope == SearchScope.AllSubfolders)
+                            _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
+                        IsSearching = false;
+                        IsSearchEmpty = false;
+                        EntriesView.Refresh();
+                        UpdateStatusAfterFilter();
+                    }
+                    else if (_searchScope == SearchScope.CurrentFolder)
                     {
                         EntriesView.Refresh();
                         UpdateStatusAfterFilter();
@@ -168,6 +178,8 @@ namespace Fylo.ViewModels
                     OnPropertyChanged(nameof(SearchScopeTooltip));
 
                     _recursiveSearchCts?.Cancel();
+                    IsSearching = false;
+                    IsSearchEmpty = false;
 
                     if (value == SearchScope.AllSubfolders)
                     {
@@ -287,7 +299,7 @@ namespace Fylo.ViewModels
         {
             if (string.IsNullOrEmpty(_currentPath))
             {
-                DisplayName = "Fast Explorer";
+                DisplayName = "Fylo";
                 return;
             }
 
@@ -814,6 +826,7 @@ namespace Fylo.ViewModels
 
             IsLoading = true;
             IsSearching = true;
+            IsSearchEmpty = false;
             StatusText = "Поиск...";
             Entries.Clear();
 

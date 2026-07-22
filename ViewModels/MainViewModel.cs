@@ -105,8 +105,6 @@ namespace Fylo.ViewModels
             }
         }
 
-        // ===== Forwarded properties =====
-
         public string CurrentPath => SelectedTab?.CurrentPath ?? string.Empty;
         public string AddressBarText
         {
@@ -142,8 +140,6 @@ namespace Fylo.ViewModels
         public bool IsShowingRecycleBin => SelectedTab?.IsShowingRecycleBin ?? false;
         public int RecycleBinItemCount => SelectedTab?.RecycleBinItemCount ?? 0;
 
-        // ===== UI State (global) =====
-
         private bool _isDrivePanelVisible = true;
 
         public bool IsDrivePanelVisible
@@ -163,8 +159,6 @@ namespace Fylo.ViewModels
             : "Показать панель дисков";
 
         public ObservableCollection<SidebarTreeItem> SidebarItems { get; } = new();
-
-        // ===== Forwarded Commands =====
 
         public RelayCommand NavigateBackCommand { get; }
         public RelayCommand NavigateForwardCommand { get; }
@@ -189,8 +183,6 @@ namespace Fylo.ViewModels
         public RelayCommand OpenSidebarItemLocationCommand { get; }
         public RelayCommand RestoreRecycleBinEntryCommand { get; }
         public RelayCommand EmptyRecycleBinCommand { get; }
-
-        // ===== Tab Management Commands =====
 
         public RelayCommand AddTabCommand { get; }
         public RelayCommand CloseTabCommand { get; }
@@ -317,8 +309,6 @@ namespace Fylo.ViewModels
         public bool CanOpenAsAdmin =>
             SelectedTab?.CanOpenAsAdmin ?? false;
 
-        // ===== Tab Management =====
-
         public void AddTab()
         {
             AddTabAt(Tabs.Count);
@@ -359,8 +349,6 @@ namespace Fylo.ViewModels
             SelectedTab = tab;
             UpdateSidebarSelection();
         }
-
-        // ===== Sidebar =====
 
         public void NavigateToSidebarItem(SidebarTreeItem? item)
         {

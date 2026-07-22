@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,7 +9,7 @@
     <RootNamespace>Fylo</RootNamespace>
     <AssemblyName>Fylo</AssemblyName>
 
-    <!-- Производительность и легковесность -->
+
     <PublishReadyToRun>true</PublishReadyToRun>
     <TieredPGO>true</TieredPGO>
     <SelfContained>false</SelfContained>

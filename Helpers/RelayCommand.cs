@@ -3,10 +3,6 @@ using System.Windows.Input;
 
 namespace Fylo.Helpers
 {
-    /// <summary>
-    /// Минималистичная реализация ICommand.
-    /// Не тянем MVVM-тулкиты — держим приложение лёгким.
-    /// </summary>
     public sealed class RelayCommand : ICommand
     {
         private readonly Action<object?> _execute;

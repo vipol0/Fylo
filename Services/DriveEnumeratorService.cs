@@ -6,10 +6,6 @@ using Fylo.Models;
 
 namespace Fylo.Services
 {
-    /// <summary>
-    /// Читает список локальных дисков. Дешёвая операция (не сканирует файлы),
-    /// поэтому выполняется синхронно.
-    /// </summary>
     public sealed class DriveEnumeratorService
     {
         public List<DriveEntry> GetDrives()
@@ -36,7 +32,6 @@ namespace Fylo.Services
                 }
                 catch (IOException)
                 {
-                    // Диск может быть недоступен (например, извлечён во время перечисления)
                 }
                 catch (UnauthorizedAccessException)
                 {

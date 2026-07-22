@@ -1,4 +1,4 @@
-<Application x:Class="Fylo.App"
+﻿<Application x:Class="Fylo.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:Fylo.Converters"
@@ -16,7 +16,7 @@
         <SolidColorBrush x:Key="RowHoverBrush" Color="#2E3033"/>
         <SolidColorBrush x:Key="RowSelectedBrush" Color="#2C3B57"/>
 
-        <!-- ========== Контекстное меню (тёмная тема) ========== -->
+
 
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
@@ -111,7 +111,7 @@
             </Setter>
         </Style>
 
-        <!-- Кнопка панели инструментов: плоская, компактная -->
+
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -139,7 +139,7 @@
             </Setter>
         </Style>
 
-        <!-- Адресная строка -->
+
         <Style x:Key="AddressBarStyle" TargetType="TextBox">
             <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -151,7 +151,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- Контейнер строки поиска -->
+
         <Style x:Key="SearchBoxContainerStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
@@ -161,7 +161,7 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <!-- Текстовое поле поиска -->
+
         <Style x:Key="SearchInputStyle" TargetType="TextBox">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
@@ -171,7 +171,7 @@
             <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}"/>
         </Style>
 
-        <!-- Кнопка переключения области поиска -->
+
         <Style x:Key="ScopeToggleButtonStyle" TargetType="Button">
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Width" Value="28"/>
@@ -198,7 +198,7 @@
             </Setter>
         </Style>
 
-        <!-- Кнопка очистки поиска -->
+
         <Style x:Key="ClearSearchButtonStyle" TargetType="Button">
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="Width" Value="20"/>
@@ -245,9 +245,9 @@
             </Setter>
         </Style>
 
-        <!-- ========== Боковая панель: TreeView ========== -->
 
-        <!-- Стиль узла дерева -->
+
+
         <Style x:Key="SidebarTreeItemStyle" TargetType="TreeViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -341,7 +341,7 @@
             </Setter>
         </Style>
 
-        <!-- Шаблон заголовка секции (Диски, Избранное) -->
+
         <HierarchicalDataTemplate x:Key="SidebarSectionTemplate"
                                   DataType="models:SidebarTreeItem"
                                   ItemsSource="{Binding Children}">
@@ -351,7 +351,7 @@
                        Margin="4,6,10,2"/>
         </HierarchicalDataTemplate>
 
-        <!-- Шаблон узла "Этот компьютер" -->
+
         <HierarchicalDataTemplate x:Key="SidebarThisPcTemplate"
                                   DataType="models:SidebarTreeItem"
                                   ItemsSource="{Binding Children}">
@@ -368,7 +368,7 @@
             </Grid>
         </HierarchicalDataTemplate>
 
-        <!-- Шаблон диска -->
+
         <DataTemplate x:Key="SidebarDriveTemplate" DataType="models:SidebarTreeItem">
             <Grid Margin="4,4,10,4">
                 <Grid.RowDefinitions>
@@ -400,7 +400,7 @@
                     </Grid>
                 </Grid>
 
-                <!-- Мини-полоса заполненности диска -->
+
                 <Grid Grid.Row="1" Height="4" Margin="22,6,4,0">
                     <Border Background="{StaticResource BorderBrush}" CornerRadius="2"/>
                     <Border Background="{StaticResource AccentBrush}" CornerRadius="2"
@@ -414,7 +414,7 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Шаблон корзины -->
+
         <DataTemplate x:Key="SidebarRecycleBinTemplate" DataType="models:SidebarTreeItem">
             <Grid Margin="4,4,10,4">
                 <Grid.ColumnDefinitions>
@@ -429,7 +429,7 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Шаблон папки -->
+
         <DataTemplate x:Key="SidebarFolderTemplate" DataType="models:SidebarTreeItem">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -525,7 +525,7 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Заголовок колонки таблицы: тёмный, без светлого системного вида -->
+
         <Style TargetType="GridViewColumnHeader">
             <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
@@ -547,14 +547,14 @@
             </Setter>
         </Style>
 
-        <!-- Кнопки-стрелки скроллбара: скрыты, оставляем только "бегунок" (тонкий, современный вид) -->
+
         <Style x:Key="ScrollBarLineButtonStyle" TargetType="RepeatButton">
             <Setter Property="Width" Value="0"/>
             <Setter Property="Height" Value="0"/>
             <Setter Property="Visibility" Value="Collapsed"/>
         </Style>
 
-        <!-- Бегунок скроллбара -->
+
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
             <Setter Property="Template">
                 <Setter.Value>
@@ -565,7 +565,7 @@
             </Setter>
         </Style>
 
-        <!-- Скроллбар: тёмный, тонкий, без стрелок сверху/снизу (для обеих ориентаций) -->
+
         <Style x:Key="ThemedScrollBarStyle" TargetType="ScrollBar">
             <Setter Property="Width" Value="9"/>
             <Setter Property="Height" Value="Auto"/>
@@ -622,14 +622,14 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Применяем тёмный скроллбар глобально ко всем ScrollViewer в приложении -->
+
         <Style TargetType="ScrollViewer">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
 
         <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource ThemedScrollBarStyle}"/>
 
-        <!-- ========== Кнопки управления окном (кастомный заголовок) ========== -->
+
         <Style x:Key="WindowButtonBaseStyle" TargetType="Button">
             <Setter Property="Width" Value="46"/>
             <Setter Property="Height" Value="32"/>
@@ -687,9 +687,9 @@
             </Setter>
         </Style>
 
-        <!-- ========== ТАБЫ (Chrome-стиль) ========== -->
 
-        <!-- Панель вкладок -->
+
+
         <Style x:Key="TabBarStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
@@ -697,7 +697,7 @@
             <Setter Property="Height" Value="36"/>
         </Style>
 
-        <!-- Отдельная вкладка -->
+
         <Style x:Key="TabItemStyle" TargetType="Border">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -709,7 +709,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         </Style>
 
-        <!-- Текст заголовка вкладки -->
+
         <Style x:Key="TabTitleTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
             <Setter Property="FontSize" Value="13"/>
@@ -718,7 +718,7 @@
             <Setter Property="MaxWidth" Value="150"/>
         </Style>
 
-        <!-- Кнопка закрытия вкладки -->
+
         <Style x:Key="TabCloseButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="18"/>
             <Setter Property="Height" Value="18"/>
@@ -774,7 +774,7 @@
             </Setter>
         </Style>
 
-        <!-- Кнопка "Новая вкладка" (+) -->
+
         <Style x:Key="NewTabButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>

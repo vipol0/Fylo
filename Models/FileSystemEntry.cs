@@ -5,11 +5,6 @@ using System.Runtime.CompilerServices;
 
 namespace Fylo.Models
 {
-    /// <summary>
-    /// Лёгкая модель элемента файловой системы (файл или папка).
-    /// Не хранит лишних данных, чтобы список из десятков тысяч файлов
-    /// оставался быстрым (важно для скорости и легковесности).
-    /// </summary>
     public sealed class FileSystemEntry : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -41,10 +36,8 @@ namespace Fylo.Models
 
         public bool HasRelativePath => !string.IsNullOrEmpty(RelativePath);
 
-        /// <summary>Человекочитаемый размер (пусто для папок).</summary>
         public string SizeDisplay => SizeBytes < 0 ? "..." : FormatSize(SizeBytes);
 
-        /// <summary>Тип для колонки "Тип".</summary>
         public string TypeDisplay => IsDirectory
             ? "Папка с файлами"
             : (string.IsNullOrEmpty(Extension) ? "Файл" : $"Файл \"{Extension.TrimStart('.').ToUpperInvariant()}\"");
