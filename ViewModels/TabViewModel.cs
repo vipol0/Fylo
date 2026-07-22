@@ -29,6 +29,7 @@ namespace Fylo.ViewModels
 
         private readonly DirectoryReaderService _reader;
         private readonly FileSystemOperationService _operationService;
+        private readonly RecycleBinService _recycleBinService = new();
         private readonly List<string> _backStack = new();
         private readonly List<string> _forwardStack = new();
 
@@ -57,6 +58,15 @@ namespace Fylo.ViewModels
         }
 
         public bool IsDrivePanelVisible { get; set; } = true;
+
+        private bool _isShowingRecycleBin;
+        public bool IsShowingRecycleBin
+        {
+            get => _isShowingRecycleBin;
+            set => SetField(ref _isShowingRecycleBin, value);
+        }
+
+        public int RecycleBinItemCount => Entries.Count;
 
         public string? EditingEntryFullPath
         {
@@ -201,6 +211,7 @@ namespace Fylo.ViewModels
         public RelayCommand RenameEntryCommand { get; }
         public RelayCommand CommitRenameCommand { get; }
         public RelayCommand CancelRenameCommand { get; }
+        public RelayCommand RestoreRecycleBinEntryCommand { get; }
 
         public TabViewModel(DirectoryReaderService reader, FileSystemOperationService operationService, string startPath)
         {
@@ -215,19 +226,29 @@ namespace Fylo.ViewModels
             NavigateBackCommand = new RelayCommand(_ => NavigateBack(), _ => _backStack.Count > 0);
             NavigateForwardCommand = new RelayCommand(_ => NavigateForward(), _ => _forwardStack.Count > 0);
             NavigateUpCommand = new RelayCommand(_ => NavigateUp(), _ => CanNavigateUp());
-            RefreshCommand = new RelayCommand(_ => _ = LoadDirectoryAsync(CurrentPath, pushHistory: false));
+            RefreshCommand = new RelayCommand(_ =>
+            {
+                if (_isShowingRecycleBin)
+                    _ = LoadRecycleBinAsync();
+                else
+                    _ = LoadDirectoryAsync(CurrentPath, pushHistory: false);
+            });
             GoToAddressCommand = new RelayCommand(_ => _ = NavigateToAddressBarAsync());
             OpenEntryCommand = new RelayCommand(param => OpenEntry(param as FileSystemEntry));
             SortByColumnCommand = new RelayCommand(param => SortByColumn(param as string));
             ClearSearchCommand = new RelayCommand(_ => ClearSearch());
             ToggleSearchScopeCommand = new RelayCommand(_ => ToggleSearchScope());
 
-            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath));
-            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath));
+            CreateFolderCommand = new RelayCommand(_ => CreateNewFolder(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin);
+            CreateFileCommand = new RelayCommand(_ => CreateNewFile(), _ => !string.IsNullOrEmpty(CurrentPath) && !_isShowingRecycleBin);
             DeleteEntryCommand = new RelayCommand(_ => DeleteSelectedEntry(), _ => SelectedEntry != null);
-            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null);
+            RenameEntryCommand = new RelayCommand(_ => StartRename(), _ => SelectedEntry != null && !_isShowingRecycleBin);
             CommitRenameCommand = new RelayCommand(_ => CommitRename());
             CancelRenameCommand = new RelayCommand(_ => CancelRename());
+
+            RestoreRecycleBinEntryCommand = new RelayCommand(
+                _ => RestoreSelectedRecycleBinEntry(),
+                _ => SelectedEntry != null && _isShowingRecycleBin);
 
             _ = LoadDirectoryAsync(startPath, pushHistory: false);
         }
@@ -253,6 +274,7 @@ namespace Fylo.ViewModels
 
         public bool CanNavigateUp()
         {
+            if (_isShowingRecycleBin) return _backStack.Count > 0;
             if (string.IsNullOrEmpty(CurrentPath)) return false;
             var parent = Directory.GetParent(CurrentPath);
             return parent != null;
@@ -271,6 +293,12 @@ namespace Fylo.ViewModels
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
             var token = _loadCts.Token;
+
+            if (_isShowingRecycleBin)
+            {
+                IsShowingRecycleBin = false;
+                OnPropertyChanged(nameof(RecycleBinItemCount));
+            }
 
             if (_searchScope != SearchScope.CurrentFolder &&
                 !string.Equals(path, CurrentPath, StringComparison.OrdinalIgnoreCase))
@@ -336,7 +364,14 @@ namespace Fylo.ViewModels
             if (_backStack.Count == 0) return;
             var target = _backStack[^1];
             _backStack.RemoveAt(_backStack.Count - 1);
-            _forwardStack.Add(CurrentPath);
+            _forwardStack.Add(_isShowingRecycleBin ? "recyclebin:" : CurrentPath);
+
+            if (target == "recyclebin:")
+            {
+                _ = LoadRecycleBinAsync(pushHistory: false);
+                return;
+            }
+
             _ = LoadDirectoryAsync(target, pushHistory: false);
         }
 
@@ -346,11 +381,27 @@ namespace Fylo.ViewModels
             var target = _forwardStack[^1];
             _forwardStack.RemoveAt(_forwardStack.Count - 1);
             _backStack.Add(CurrentPath);
+
+            if (target == "recyclebin:")
+            {
+                _ = LoadRecycleBinAsync(pushHistory: false);
+                return;
+            }
+
             _ = LoadDirectoryAsync(target, pushHistory: false);
         }
 
         public void NavigateUp()
         {
+            if (_isShowingRecycleBin)
+            {
+                if (_backStack.Count > 0)
+                {
+                    NavigateBack();
+                }
+                return;
+            }
+
             var parent = Directory.GetParent(CurrentPath);
             if (parent != null)
                 _ = LoadDirectoryAsync(parent.FullName, pushHistory: true);
@@ -364,6 +415,12 @@ namespace Fylo.ViewModels
         public void OpenEntry(FileSystemEntry? entry)
         {
             if (entry == null) return;
+
+            if (_isShowingRecycleBin)
+            {
+                RestoreSelectedRecycleBinEntry();
+                return;
+            }
 
             if (entry.IsDirectory)
             {
@@ -427,15 +484,38 @@ namespace Fylo.ViewModels
             var entry = SelectedEntry;
             if (entry == null) return;
 
-            var type = entry.IsDirectory ? "папку" : "файл";
-            var message = $"Вы уверены, что хотите удалить {type} \"{entry.Name}\"?\nОн будет перемещён в корзину.";
-            var dialog = new ConfirmDeleteDialog(message);
-            dialog.ShowDialog();
+            if (_isShowingRecycleBin)
+            {
+                var type = entry.IsDirectory ? "папку" : "файл";
+                var message = $"Вы уверены, что хотите удалить {type} \"{entry.Name}\" навсегда?\nЭто действие нельзя отменить.";
+                var dialog = new ConfirmDeleteDialog(message);
+                dialog.ShowDialog();
 
-            if (!dialog.Confirmed) return;
+                if (!dialog.Confirmed) return;
 
-            var success = _operationService.DeleteToRecycleBin(entry.FullPath, entry.IsDirectory);
-            if (success)
+                var success = _operationService.DeletePermanent(entry.OriginalPath, entry.IsDirectory);
+                if (success)
+                {
+                    Entries.Remove(entry);
+                    OnPropertyChanged(nameof(RecycleBinItemCount));
+                    StatusText = $"Удалено навсегда: {entry.Name}";
+                }
+                else
+                {
+                    StatusText = "Не удалось удалить элемент";
+                }
+                return;
+            }
+
+            var type2 = entry.IsDirectory ? "папку" : "файл";
+            var message2 = $"Вы уверены, что хотите удалить {type2} \"{entry.Name}\"?\nОн будет перемещён в корзину.";
+            var dialog2 = new ConfirmDeleteDialog(message2);
+            dialog2.ShowDialog();
+
+            if (!dialog2.Confirmed) return;
+
+            var success2 = _operationService.DeleteToRecycleBin(entry.FullPath, entry.IsDirectory);
+            if (success2)
             {
                 if (entry.IsDirectory) _reader.InvalidateSize(entry.FullPath);
                 Entries.Remove(entry);
@@ -444,6 +524,112 @@ namespace Fylo.ViewModels
             else
             {
                 StatusText = "Не удалось удалить элемент";
+            }
+        }
+
+        public async Task LoadRecycleBinAsync(bool pushHistory = true)
+        {
+            _recursiveSearchCts?.Cancel();
+            _sizingCts?.Cancel();
+            _loadCts?.Cancel();
+
+            if (_isShowingRecycleBin) return;
+
+            IsLoading = true;
+            StatusText = "Загрузка корзины...";
+
+            if (pushHistory && !string.IsNullOrEmpty(CurrentPath))
+            {
+                _backStack.Add(CurrentPath);
+                _forwardStack.Clear();
+            }
+
+            IsShowingRecycleBin = true;
+
+            try
+            {
+                var items = await Task.Run(() => _recycleBinService.GetItems());
+
+                Entries.Clear();
+
+                foreach (var item in items)
+                {
+                    Entries.Add(new FileSystemEntry
+                    {
+                        Name = item.Name,
+                        FullPath = item.OriginalPath,
+                        OriginalPath = item.RecycleBinPath,
+                        SizeBytes = item.SizeBytes,
+                        Modified = item.DateDeleted,
+                        IsDirectory = item.IsDirectory,
+                        Extension = item.Extension,
+                        IsRecycleBinItem = true,
+                        RelativePath = GetParentPath(item.OriginalPath)
+                    });
+                }
+
+                CurrentPath = "Корзина";
+                AddressBarText = "Корзина";
+                DisplayName = "Корзина";
+                StatusText = $"Элементов: {Entries.Count}";
+                IsSearchEmpty = false;
+                OnPropertyChanged(nameof(RecycleBinItemCount));
+                NavigateBackCommand.RaiseCanExecuteChanged();
+                NavigateForwardCommand.RaiseCanExecuteChanged();
+                NavigateUpCommand.RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Ошибка: {ex.Message}";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        private void RestoreSelectedRecycleBinEntry()
+        {
+            var entry = SelectedEntry;
+            if (entry == null || !_isShowingRecycleBin) return;
+
+            var success = _recycleBinService.RestoreItem(entry.FullPath);
+            if (success)
+            {
+                Entries.Remove(entry);
+                OnPropertyChanged(nameof(RecycleBinItemCount));
+                StatusText = $"Восстановлено: {entry.Name}";
+            }
+            else
+            {
+                StatusText = "Не удалось восстановить элемент";
+            }
+        }
+
+        public void EmptyRecycleBin()
+        {
+            var message = "Вы уверены, что хотите очистить корзину?\nВсе элементы будут удалены навсегда.";
+            var dialog = new ConfirmDeleteDialog(message);
+            dialog.ShowDialog();
+
+            if (!dialog.Confirmed) return;
+
+            _recycleBinService.EmptyBin(IntPtr.Zero);
+            Entries.Clear();
+            OnPropertyChanged(nameof(RecycleBinItemCount));
+            StatusText = "Корзина очищена";
+        }
+
+        private static string GetParentPath(string fullPath)
+        {
+            try
+            {
+                var parent = Path.GetDirectoryName(fullPath.TrimEnd('\\'));
+                return parent ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
 

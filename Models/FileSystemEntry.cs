@@ -16,7 +16,9 @@ namespace Fylo.Models
 
         public string Name { get; init; } = string.Empty;
         public string FullPath { get; init; } = string.Empty;
+        public string OriginalPath { get; init; } = string.Empty;
         public bool IsDirectory { get; init; }
+        public bool IsRecycleBinItem { get; init; }
 
         private long _sizeBytes;
         public long SizeBytes

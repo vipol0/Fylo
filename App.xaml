@@ -319,6 +319,21 @@
             </Grid>
         </DataTemplate>
 
+        <!-- Шаблон корзины -->
+        <DataTemplate x:Key="SidebarRecycleBinTemplate" DataType="models:SidebarTreeItem">
+            <Grid Margin="4,4,10,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="13" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+            </Grid>
+        </DataTemplate>
+
         <!-- Шаблон папки -->
         <DataTemplate x:Key="SidebarFolderTemplate" DataType="models:SidebarTreeItem">
             <Grid>

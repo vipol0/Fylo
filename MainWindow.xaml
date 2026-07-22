@@ -265,7 +265,8 @@
                         SectionTemplate="{StaticResource SidebarSectionTemplate}"
                         ThisPcTemplate="{StaticResource SidebarThisPcTemplate}"
                         DriveTemplate="{StaticResource SidebarDriveTemplate}"
-                        FolderTemplate="{StaticResource SidebarFolderTemplate}"/>
+                        FolderTemplate="{StaticResource SidebarFolderTemplate}"
+                        RecycleBinTemplate="{StaticResource SidebarRecycleBinTemplate}"/>
                 </Border.Resources>
 
                 <TreeView x:Name="SidebarTree"
@@ -300,12 +301,20 @@
                       PreviewMouseWheel="FilesListView_PreviewMouseWheel">
                 <ListView.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Создать папку" Command="{Binding CreateFolderCommand}"/>
-                        <MenuItem Header="Создать файл" Command="{Binding CreateFileCommand}"/>
-                        <Separator/>
-                        <MenuItem Header="Переименовать" Command="{Binding RenameEntryCommand}"/>
+                        <MenuItem Header="Создать папку" Command="{Binding CreateFolderCommand}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Создать файл" Command="{Binding CreateFileCommand}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
+                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Восстановить" Command="{Binding RestoreRecycleBinEntryCommand}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Переименовать" Command="{Binding RenameEntryCommand}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:InvertedBoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Удалить" Command="{Binding DeleteEntryCommand}"/>
-                        <Separator/>
+                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                        <MenuItem Header="Очистить корзину" Command="{Binding EmptyRecycleBinCommand}"
+                                  Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
+                        <Separator Visibility="{Binding IsShowingRecycleBin, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>
                         <MenuItem Header="Добавить в избранное"
                                   Command="{Binding AddToFavoritesCommand}"
                                   Visibility="{Binding CanAddToFavorites, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"/>

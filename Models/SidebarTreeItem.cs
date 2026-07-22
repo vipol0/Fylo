@@ -8,7 +8,8 @@ namespace Fylo.Models
         Section,
         ThisPc,
         Drive,
-        Folder
+        Folder,
+        RecycleBin
     }
 
     public sealed class SidebarTreeItem : ViewModelBase

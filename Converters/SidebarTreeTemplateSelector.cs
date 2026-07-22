@@ -10,6 +10,7 @@ namespace Fylo.Converters
         public DataTemplate? ThisPcTemplate { get; set; }
         public DataTemplate? DriveTemplate { get; set; }
         public DataTemplate? FolderTemplate { get; set; }
+        public DataTemplate? RecycleBinTemplate { get; set; }
 
         public override DataTemplate? SelectTemplate(object item, DependencyObject container)
         {
@@ -21,6 +22,7 @@ namespace Fylo.Converters
                     SidebarItemType.ThisPc => ThisPcTemplate,
                     SidebarItemType.Drive => DriveTemplate,
                     SidebarItemType.Folder => FolderTemplate,
+                    SidebarItemType.RecycleBin => RecycleBinTemplate,
                     _ => base.SelectTemplate(item, container)
                 };
             }

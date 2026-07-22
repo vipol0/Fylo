@@ -17,6 +17,7 @@ namespace Fylo.ViewModels
         private readonly FavoritesService _favoritesService = new();
         private readonly DirectoryReaderService _reader = new();
         private readonly FileSystemOperationService _operationService = new();
+        private readonly RecycleBinService _recycleBinService = new();
 
         public ObservableCollection<TabViewModel> Tabs { get; } = new();
 
@@ -62,6 +63,8 @@ namespace Fylo.ViewModels
             OnPropertyChanged(nameof(SelectedEntry));
             OnPropertyChanged(nameof(Entries));
             OnPropertyChanged(nameof(EntriesView));
+            OnPropertyChanged(nameof(IsShowingRecycleBin));
+            OnPropertyChanged(nameof(RecycleBinItemCount));
 
             SelectedTab?.ScheduleFolderSizing();
 
@@ -88,6 +91,10 @@ namespace Fylo.ViewModels
             {
                 UpdateSidebarSelection();
                 SelectedTab?.ScheduleFolderSizing();
+            }
+            else if (e.PropertyName is nameof(TabViewModel.IsShowingRecycleBin) or nameof(TabViewModel.RecycleBinItemCount))
+            {
+                OnPropertyChanged(e.PropertyName);
             }
         }
 
@@ -124,6 +131,8 @@ namespace Fylo.ViewModels
         }
         public ObservableCollection<FileSystemEntry> Entries => SelectedTab?.Entries ?? new();
         public ICollectionView EntriesView => SelectedTab?.EntriesView ?? CollectionViewSource.GetDefaultView(new ObservableCollection<FileSystemEntry>());
+        public bool IsShowingRecycleBin => SelectedTab?.IsShowingRecycleBin ?? false;
+        public int RecycleBinItemCount => SelectedTab?.RecycleBinItemCount ?? 0;
 
         // ===== UI State (global) =====
 
@@ -167,6 +176,8 @@ namespace Fylo.ViewModels
         public RelayCommand ToggleDrivePanelCommand { get; }
         public RelayCommand AddToFavoritesCommand { get; }
         public RelayCommand RemoveFromFavoritesCommand { get; }
+        public RelayCommand RestoreRecycleBinEntryCommand { get; }
+        public RelayCommand EmptyRecycleBinCommand { get; }
 
         // ===== Tab Management Commands =====
 
@@ -188,7 +199,14 @@ namespace Fylo.ViewModels
                 _ => SelectedTab?.CanNavigateUp() ?? false);
 
             RefreshCommand = new RelayCommand(
-                _ => { if (SelectedTab != null) _ = SelectedTab.LoadDirectoryAsync(SelectedTab.CurrentPath, pushHistory: false); },
+                _ =>
+                {
+                    if (SelectedTab == null) return;
+                    if (SelectedTab.IsShowingRecycleBin)
+                        _ = SelectedTab.LoadRecycleBinAsync();
+                    else
+                        _ = SelectedTab.LoadDirectoryAsync(SelectedTab.CurrentPath, pushHistory: false);
+                },
                 _ => SelectedTab != null);
 
             GoToAddressCommand = new RelayCommand(
@@ -237,6 +255,13 @@ namespace Fylo.ViewModels
 
             RemoveFromFavoritesCommand = new RelayCommand(
                 param => RemoveFromFavorites(param as SidebarTreeItem));
+
+            RestoreRecycleBinEntryCommand = new RelayCommand(
+                _ => SelectedTab?.RestoreRecycleBinEntryCommand.Execute(null),
+                _ => SelectedTab?.RestoreRecycleBinEntryCommand.CanExecute(null) ?? false);
+
+            EmptyRecycleBinCommand = new RelayCommand(
+                _ => SelectedTab?.EmptyRecycleBin());
 
             AddTabCommand = new RelayCommand(_ => AddTab());
             CloseTabCommand = new RelayCommand(param => CloseTab(param as TabViewModel));
@@ -303,7 +328,15 @@ namespace Fylo.ViewModels
 
         public void NavigateToSidebarItem(SidebarTreeItem? item)
         {
-            if (item == null || string.IsNullOrEmpty(item.Path)) return;
+            if (item == null) return;
+
+            if (item.ItemType == SidebarItemType.RecycleBin)
+            {
+                _ = SelectedTab?.LoadRecycleBinAsync();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(item.Path)) return;
             if (item.ItemType == SidebarItemType.Drive && !item.IsReady) return;
             _ = SelectedTab?.LoadDirectoryAsync(item.Path, pushHistory: true);
         }
@@ -311,22 +344,24 @@ namespace Fylo.ViewModels
         private void UpdateSidebarSelection()
         {
             if (SelectedTab == null) return;
-            var path = SelectedTab.CurrentPath;
-            if (string.IsNullOrEmpty(path)) return;
 
-            foreach (var section in SidebarItems)
+            var isRecycleBin = SelectedTab.IsShowingRecycleBin;
+            var currentPath = SelectedTab.CurrentPath;
+
+            foreach (var item in SidebarItems)
             {
-                foreach (var child in section.Children)
+                if (item.Children.Count > 0)
                 {
-                    if (string.Equals(child.Path, path, StringComparison.OrdinalIgnoreCase))
+                    foreach (var child in item.Children)
                     {
-                        child.IsSelected = true;
-                    }
-                    else
-                    {
-                        child.IsSelected = false;
+                        child.IsSelected = !isRecycleBin &&
+                            string.Equals(child.Path, currentPath, StringComparison.OrdinalIgnoreCase);
                     }
                 }
+
+                item.IsSelected = isRecycleBin
+                    ? item.ItemType == SidebarItemType.RecycleBin
+                    : string.Equals(item.Path, currentPath, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -391,6 +426,16 @@ namespace Fylo.ViewModels
             AddFolderChild(thisPc, "Музыка", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
             AddFolderChild(thisPc, "Изображения", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
             SidebarItems.Add(thisPc);
+
+            var recycleBin = new SidebarTreeItem
+            {
+                DisplayName = "Корзина",
+                Icon = "🗑️",
+                ItemType = SidebarItemType.RecycleBin,
+                IsSelectable = true,
+                Path = "recyclebin:"
+            };
+            SidebarItems.Add(recycleBin);
         }
 
         private static void AddFolderChild(SidebarTreeItem parent, string displayName, string path, bool isFavorite = false)
